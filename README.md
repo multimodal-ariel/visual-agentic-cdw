@@ -1,4 +1,4 @@
-## CDW: Agentic AI Clinical Imaging Pipeline
+# CDW: Agentic AI Clinical Imaging Pipeline
 
 End-to-end, LLM-orchestrated processing for uncurated clinical CT/MRI:
 
