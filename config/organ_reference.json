@@ -1,0 +1,118 @@
+{
+  "_comment": "Organ reference data for QC checks. Volume ranges in mL. TODO: replace with data-driven bounds.",
+
+  "volume_ranges_ml": {
+    "liver":                  [800.0,  2500.0],
+    "spleen":                 [40.0,   600.0],
+    "kidney_left":            [80.0,   350.0],
+    "kidney_right":           [80.0,   350.0],
+    "pancreas":               [30.0,   180.0],
+    "gallbladder":            [5.0,    100.0],
+    "stomach":                [50.0,   1500.0],
+    "duodenum":               [10.0,   200.0],
+    "small_bowel":            [100.0,  3000.0],
+    "colon":                  [100.0,  3000.0],
+    "urinary_bladder":        [20.0,   800.0],
+    "adrenal_gland_left":     [1.0,    20.0],
+    "adrenal_gland_right":    [1.0,    20.0],
+    "lung_upper_lobe_left":   [200.0,  1500.0],
+    "lung_lower_lobe_left":   [300.0,  2000.0],
+    "lung_upper_lobe_right":  [200.0,  1500.0],
+    "lung_middle_lobe_right": [80.0,   700.0],
+    "lung_lower_lobe_right":  [300.0,  2000.0],
+    "heart":                  [400.0,  1200.0],
+    "aorta":                  [50.0,   400.0],
+    "pulmonary_artery":       [10.0,   150.0],
+    "trachea":                [5.0,    60.0],
+    "esophagus":              [5.0,    80.0],
+    "inferior_vena_cava":     [15.0,   150.0],
+    "portal_vein_and_splenic_vein": [5.0, 80.0],
+    "iliac_artery_left":      [3.0,    50.0],
+    "iliac_artery_right":     [3.0,    50.0],
+    "iliac_vena_left":        [3.0,    50.0],
+    "iliac_vena_right":       [3.0,    50.0]
+  },
+
+  "paired_organ_ratios": [
+    {"organ_a": "kidney_left",        "organ_b": "kidney_right",        "min_ratio": 0.5, "max_ratio": 2.0},
+    {"organ_a": "adrenal_gland_left", "organ_b": "adrenal_gland_right", "min_ratio": 0.3, "max_ratio": 3.0},
+    {"organ_a": "iliac_artery_left",  "organ_b": "iliac_artery_right",  "min_ratio": 0.4, "max_ratio": 2.5},
+    {"organ_a": "iliac_vena_left",    "organ_b": "iliac_vena_right",    "min_ratio": 0.4, "max_ratio": 2.5}
+  ],
+
+  "lung_composite_ratios": [
+    {
+      "left_lobes":  ["lung_upper_lobe_left", "lung_lower_lobe_left"],
+      "right_lobes": ["lung_upper_lobe_right", "lung_middle_lobe_right", "lung_lower_lobe_right"],
+      "min_ratio": 0.6,
+      "max_ratio": 1.2
+    }
+  ],
+
+  "expected_max_components": {
+    "liver": 1, "spleen": 1, "pancreas": 1, "gallbladder": 1,
+    "stomach": 1, "duodenum": 1, "urinary_bladder": 1,
+    "kidney_left": 1, "kidney_right": 1,
+    "adrenal_gland_left": 1, "adrenal_gland_right": 1,
+    "heart": 1, "aorta": 1, "esophagus": 1, "trachea": 1,
+    "inferior_vena_cava": 1,
+    "lung_upper_lobe_left": 1, "lung_lower_lobe_left": 1,
+    "lung_upper_lobe_right": 1, "lung_middle_lobe_right": 1,
+    "lung_lower_lobe_right": 1
+  },
+
+  "anatomy_to_expected_organs": {
+    "head": ["brain", "skull"],
+    "neck": ["thyroid_gland", "esophagus", "trachea"],
+    "chest": [
+      "lung_upper_lobe_left", "lung_lower_lobe_left",
+      "lung_upper_lobe_right", "lung_middle_lobe_right", "lung_lower_lobe_right",
+      "heart", "aorta", "pulmonary_artery", "trachea", "esophagus",
+      "inferior_vena_cava"
+    ],
+    "abdomen": [
+      "liver", "spleen", "kidney_left", "kidney_right", "pancreas",
+      "gallbladder", "stomach", "duodenum", "small_bowel", "colon",
+      "adrenal_gland_left", "adrenal_gland_right",
+      "aorta", "inferior_vena_cava", "portal_vein_and_splenic_vein"
+    ],
+    "pelvis": [
+      "urinary_bladder", "colon", "small_bowel",
+      "iliac_artery_left", "iliac_artery_right",
+      "iliac_vena_left", "iliac_vena_right"
+    ],
+    "abdomen_pelvis": [
+      "liver", "spleen", "kidney_left", "kidney_right", "pancreas",
+      "gallbladder", "stomach", "duodenum", "small_bowel", "colon",
+      "adrenal_gland_left", "adrenal_gland_right",
+      "urinary_bladder", "aorta", "inferior_vena_cava",
+      "portal_vein_and_splenic_vein",
+      "iliac_artery_left", "iliac_artery_right",
+      "iliac_vena_left", "iliac_vena_right"
+    ],
+    "chest_abdomen_pelvis": [
+      "lung_upper_lobe_left", "lung_lower_lobe_left",
+      "lung_upper_lobe_right", "lung_middle_lobe_right", "lung_lower_lobe_right",
+      "heart", "aorta", "pulmonary_artery", "trachea", "esophagus",
+      "liver", "spleen", "kidney_left", "kidney_right", "pancreas",
+      "gallbladder", "stomach", "duodenum", "small_bowel", "colon",
+      "adrenal_gland_left", "adrenal_gland_right",
+      "urinary_bladder", "inferior_vena_cava",
+      "portal_vein_and_splenic_vein",
+      "iliac_artery_left", "iliac_artery_right",
+      "iliac_vena_left", "iliac_vena_right"
+    ],
+    "whole_body": [
+      "liver", "spleen", "kidney_left", "kidney_right", "pancreas",
+      "gallbladder", "stomach", "duodenum", "small_bowel", "colon",
+      "adrenal_gland_left", "adrenal_gland_right",
+      "lung_upper_lobe_left", "lung_lower_lobe_left",
+      "lung_upper_lobe_right", "lung_middle_lobe_right", "lung_lower_lobe_right",
+      "heart", "aorta", "pulmonary_artery", "trachea", "esophagus",
+      "urinary_bladder", "inferior_vena_cava",
+      "portal_vein_and_splenic_vein",
+      "iliac_artery_left", "iliac_artery_right",
+      "iliac_vena_left", "iliac_vena_right"
+    ]
+  }
+}

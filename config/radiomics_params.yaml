@@ -1,0 +1,40 @@
+# ==============================================================================
+# PyRadiomics Feature Extraction Parameters
+# CDW Agentic Pipeline — default radiomics configuration
+# ==============================================================================
+# Docs: https://pyradiomics.readthedocs.io/en/latest/customization.html
+
+setting:
+  # Resampling — resample both image and mask to isotropic 1 mm voxels
+  resampledPixelSpacing: [1, 1, 1]
+  interpolator: sitkBSpline       # image resampling
+  label: 1                        # mask label value to use
+
+  # Normalisation — z-score inside the mask
+  normalize: true
+  normalizeScale: 100
+
+  # Binning
+  binWidth: 25                    # for CT (Hounsfield); override per modality
+  binCount: null                  # alternative: fixed number of bins (null = use binWidth)
+
+  # Outlier correction (percentile clipping before binning)
+  removeOutliers: 3.0             # clip beyond 3 σ from mean inside mask
+
+  # Geometry tolerance for mismatched image/mask spacing
+  geometryTolerance: 0.0001
+  correctMask: true               # attempt to correct minor mask issues automatically
+
+  # GLCM / GLDM / GLRLM direction averaging
+  force2D: false                  # true = extract 2D features slice-by-slice
+  force2Ddimension: 0             # 0 = axial when force2D=true
+
+# Features to extract (comment out a class to skip it entirely)
+featureClass:
+  firstorder: []      # all first-order features
+  glcm: []            # Gray Level Co-occurrence Matrix
+  glrlm: []           # Gray Level Run Length Matrix
+  glszm: []           # Gray Level Size Zone Matrix
+  gldm: []            # Gray Level Dependence Matrix
+  ngtdm: []           # Neighbouring Gray Tone Difference Matrix
+  # shape: []         # 3D shape features (requires 3D mask — disabled by default)

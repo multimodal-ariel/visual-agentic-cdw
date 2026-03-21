@@ -35,3 +35,6 @@
 [submodule "external/cuRadiomics"]
 	path = external/cuRadiomics
 	url = https://github.com/jiaoyining/cuRadiomics.git
+[submodule "external/detectron2"]
+	path = external/detectron2
+	url = https://github.com/facebookresearch/detectron2.git
