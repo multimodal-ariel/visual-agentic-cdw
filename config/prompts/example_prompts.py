@@ -17,7 +17,7 @@ METADATA_EXTRACTION_SINGLE = """You are a medical imaging metadata parser. Given
 
 Return ONLY a JSON object with these fields:
 - modality: one of [CT, MRI, PET_CT, NM, CR, US, FL, UNKNOWN]
-- anatomy: one of [head, neck, chest, abdomen, pelvis, abdomen_pelvis, chest_abdomen_pelvis, spine, extremity, whole_body, cardiac, UNKNOWN]
+- anatomy: one of [head, neck, chest, abdomen, pelvis, abdomen_pelvis, chest_abdomen_pelvis, spine, extremity, whole_body, cardiac, UNKNOWN]. Parse ALL body regions from the path — e.g. CT_CHEST_ABD_PELVIS → chest_abdomen_pelvis (not just abdomen_pelvis).
 - shape: one of [2D, 3D, 4D]
 - is_diagnostic: true/false (see rules below)
 - series_type: brief description (e.g. "axial soft tissue CT with contrast", "T1 VIBE Dixon MRI")
@@ -77,34 +77,36 @@ Rules for is_diagnostic:
 
 TOOL_SELECTION = """You are a medical imaging pipeline planner. Given case metadata, select which segmentation tools to run.
 
-Available tools:
-- TotalSegmentator_CT: CT only (3D). 104 structures. Best for standard axial soft-tissue CT.
-- TotalSegmentator_MR: MRI only (3D). 80 structures. Sequence-independent. Use flag -ta total_mr.
+The guiding principle is MAXIMUM COVERAGE: run ALL tools compatible with the case modality.
+More tools = better ensemble QC, more organ coverage, and more robust radiomics.
+Only exclude a tool if it is clearly incompatible with the modality or anatomy.
+
+Available tools (use these EXACT names in your response):
+- TotalSegmentator_CT: CT only (3D). 117 structures. Best for standard axial soft-tissue CT.
+- TotalSegmentator_MR: MRI only (3D). 50 structures. Sequence-independent.
 - MRSegmentator: CT and MRI (3D). 40 classes. Good for abdominal organs across both modalities.
 - MRISegmenter: MRI only (3D). 62 structures. Specifically for T1-weighted abdominal MRI.
-- VIBESegmentator: MRI and CT (3D). 71 MRI / 72 CT structures. Full torso. Works on multiple MRI sequences.
-- SAT: CT, MRI, PET (3D). 497 text-prompted classes. Use for rare structures not covered by fixed-class tools.
-- VoxTell: CT and MRI (3D). Free-text prompted. Use for targeted segmentation of specific structures.
-- NV_Segment_CTMR: CT and MRI (3D). 345+ structures including detailed brain parcellation.
-- BiomedParseV2: Any modality (2D only). Text-prompted. Use for 2D radiographs (X-ray, mammography).
+- VIBESegmentator: MRI only (3D). 72 structures. Full torso. Works on multiple MRI sequences.
+- VISTA3D: CT and MRI (3D). 345+ structures including detailed brain parcellation.
+- TextMedSeg3D: CT, MRI, PET (3D). 497 text-prompted classes. Use for structures not covered by fixed-class tools.
+- VoxTell: CT, MRI, PET (3D). Free-text prompted. Use for targeted segmentation of specific structures.
 
-Selection principles:
-1. Always include at least one Tier 1 tool (TotalSegmentator or NV_Segment_CTMR) as the primary model
-2. For abdomen/pelvis CT: prefer TotalSegmentator_CT as primary, add MRSegmentator for ensemble
-3. For abdomen MRI with VIBE/Dixon: include VIBESegmentator
-4. For T1w abdominal MRI: include MRISegmenter
-5. For brain: prefer NV_Segment_CTMR (has detailed brain parcellation)
-6. For 2D data (X-ray, mammography): use BiomedParseV2
-7. For structures not covered by fixed-class tools: add SAT or VoxTell with specific organ prompts
-8. For PET/CT: segment the CT component with CT tools, then project masks onto PET
+Selection rules (MANDATORY — follow these exactly):
+1. Put ALL modality-compatible fixed-class tools in primary_tools. Do NOT use secondary_tools.
+2. For CT: primary_tools MUST include TotalSegmentator_CT, MRSegmentator, VISTA3D
+3. For MRI: primary_tools MUST include TotalSegmentator_MR, MRSegmentator, MRISegmenter, VIBESegmentator, VISTA3D
+4. TextMedSeg3D and VoxTell ALWAYS go in targeted_tools (never in primary or secondary)
+5. For PET/CT: use CT-compatible tools on the CT component; add TextMedSeg3D/VoxTell for PET-specific structures
+6. For brain: always include VISTA3D (has detailed brain parcellation)
+7. Text-promptable tools (TextMedSeg3D, VoxTell) should include organ prompts for structures NOT covered by the fixed-class tools
 
 Case metadata:
 {case_metadata_json}
 
 Return a JSON object with:
-- primary_tools: list of Tier 1 tools to run
-- secondary_tools: list of Tier 2 tools to run (for ensemble/second opinion)
-- targeted_tools: list of Tier 3 tools with specific text prompts (if needed)
+- primary_tools: list of ALL compatible fixed-class tools (do NOT split into primary/secondary)
+- secondary_tools: always an empty list []
+- targeted_tools: list of text-promptable tools, each as {{"tool": "<name>", "organs": ["organ1", "organ2"]}}
 - qc_organs: list of organs to check in QC based on the detected anatomy
 - reasoning: one sentence explaining the selection"""
 

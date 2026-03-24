@@ -232,9 +232,9 @@ class GeometricQC:
 
     # Non-organ filenames that can appear in segmentation directories
     _SKIP_NAMES = {
-        "statistics", "combined", "multilabel",
+        "statistics", "combined", "multilabel", "multilabel_seg",
         "image_nifti_seg", "image_nifti", "image",
-        "plan", "metadata", "summary",
+        "plan", "metadata", "summary", "manifest",
     }
 
     def _discover_masks(self, seg_dir: str) -> Dict[str, str]:

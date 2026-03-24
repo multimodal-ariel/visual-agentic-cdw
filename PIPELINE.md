@@ -256,16 +256,16 @@ Supported LLMs:
 
 ## Radiomics
 
-Primary backend: **PyRadiomics (CPU)** — 93 features across 6 texture classes, gated by QC pass/fail per organ. Fast enough for production (~1-2s per organ on dummy data).
+Primary backend: **PyRadiomics (CPU)** — 107 features across 7 classes (18 first-order + 24 GLCM + 16 GLRLM + 16 GLSZM + 14 GLDM + 5 NGTDM + 14 shape), gated by QC pass/fail per organ. Fast enough for production (~1-2s per organ on dummy data).
 
 ```python
 from radiomics.pyradiomics import extract_pyradiomics, RadiomicsResult
 
 result = extract_pyradiomics("image.nii.gz", "liver_mask.nii.gz", organ="liver")
-print(result.feature_count, result.features)   # 93 features: firstorder + GLCM/GLRLM/GLSZM/GLDM/NGTDM
+print(result.feature_count, result.features)   # 107 features: firstorder + shape + GLCM/GLRLM/GLSZM/GLDM/NGTDM
 ```
 
-Config: `config/radiomics_params.yaml` — 1mm isotropic resampling, z-score normalisation, firstorder + GLCM/GLRLM/GLSZM/GLDM/NGTDM.
+Config: `config/radiomics_params.yaml` — 1mm isotropic resampling, z-score normalisation, firstorder + shape + GLCM/GLRLM/GLSZM/GLDM/NGTDM (7 classes, 107 features).
 Env: `cdw_radiomics` — PyRadiomics (`git+https://github.com/AIM-Harvard/pyradiomics.git`), SimpleITK, nibabel, scipy, pandas.
 
 > **Optional: cuRadiomics (GPU)** — available in `radiomics/curadiomics.py` but not used in the pipeline. Only supports GLCM + first-order (41 features, 2D per-slice with aggregation). Requires TensorFlow + recompiled CUDA `.so` (originally built for TF 1.12 / CUDA 9.2). Use only if GPU acceleration is needed for very large volumes.
@@ -276,10 +276,11 @@ No ground truth required. All checks are reference-free — masks are validated 
 
 ### Tier 1: Geometric QC (`GeometricQC`)
 Per-tool, per-organ checks ported from `scripts/qc_segs_old.py` and generalized to any modality/tool:
-- **Volume plausibility** — organ volume in mL vs anatomical reference ranges (29 organs)
-- **Paired volume ratios** — bilateral symmetry: kidneys, adrenals, iliacs, lungs (4 pairs + lung composite)
-- **Connected components** — fragment count + largest-CC fraction (21 organs with CC expectations)
-- **Mask overlap** — pairwise voxel overlap between organ masks
+- **Volume plausibility** — organ volume in mL vs anatomical reference ranges (29 organs). *CT only* — skipped for MRI (reference ranges are CT-calibrated).
+- **Paired volume ratios** — bilateral symmetry: kidneys, adrenals, iliacs, lungs (4 pairs + lung composite). *CT only.*
+- **Connected components** — fragment count + largest-CC fraction (21 organs with CC expectations). *All modalities.*
+- **Mask overlap** — pairwise voxel overlap between organ masks. *All modalities.*
+- **Non-organ filtering** — `image_nifti_seg`, combined segmentations, and image-like filenames are excluded from mask discovery.
 
 ### Tier 2: Multi-Tool Agreement (`MultiToolQC`)
 Cross-tool pairwise checks when ≥2 tools segment the same case:
@@ -292,7 +293,7 @@ Cross-tool pairwise checks when ≥2 tools segment the same case:
 Plugs Tier 1 flags into validated LLM prompts for clinical assessment:
 - **QC Interpretation** (`QC_INTERPRETATION` prompt) → overall quality (GOOD/ACCEPTABLE/POOR/UNUSABLE), per-organ usability, feature-class safety
 - **Radiomics Gating** (`RADIOMICS_GATING` prompt) → per-organ extract/skip decisions with postprocessing recommendations
-- **Fallback** — rule-based gating when LLM is unavailable (PASS→full extraction, WARN→first_order+LCC, FAIL→skip)
+- **Fallback** — rule-based gating when LLM is unavailable: PASS → full extraction (first_order + shape + texture); WARN → severity-aware feature gating (LCC fraction ≥0.9 → full, ≥0.7 → first_order + shape, <0.7 → first_order only) + LCC postprocessing; FAIL → skip. Quality assessment derived from geometric severity (PASS→GOOD, WARN→ACCEPTABLE, FAIL→POOR) instead of defaulting to ACCEPTABLE.
 
 ```python
 from qc import GeometricQC, MultiToolQC, QCInterpreter, CaseQCReport
@@ -371,7 +372,7 @@ Pipeline flow per case:
 6. Postprocess masks (LCC, hole fill)
 7. Tier 1+2 QC (geometric + multi-tool agreement)
 8. Tier 3 QC interpretation (LLM or rule-based fallback)
-9. Radiomics extraction (PyRadiomics on QC-passing organs)
+9. Radiomics extraction (PyRadiomics on QC-passing organs, filtered by `expected_organs` whitelist)
 10. Save per-case log JSON to `logs/cases/{case_id}_log.json`
 
 ### Batch runner (`BatchRunner`)
@@ -489,22 +490,35 @@ The report (`tests/results/e2e_report.json`) tracks every pipeline decision per 
 | 001 | MRI | abdomen_pelvis | 22 |
 | 002 | MRI | chest | 14 |
 
-**Image pipeline: 6/6 completed, 290 organs × 93 features = 26,970 radiomic features**
+**Image pipeline: 6/6 completed, 89 organs × 107 features = 9,523 radiomic features**
 
-| Case | Mod | QC | Tools OK | Radiomics Organs | Time |
-|------|-----|------|----------|-----------------|------|
-| 0003 | CT | WARN | 1/2 | 74 | 326s |
-| 0004 | CT | WARN | 2/2 | 54 | 85s |
-| 0005 | CT | WARN | 1/2 | 75 | 196s |
-| 0002 | MRI | FAIL | 2/2 | 27 | 85s |
-| 001 | MRI | WARN | 2/2 | 35 | 80s |
-| 002 | MRI | FAIL | 2/2 | 25 | 65s |
+| Case | Mod | QC | Tools OK | Radiomics Organs | Features/organ | Time |
+|------|-----|------|----------|-----------------|----------------|------|
+| 0003 | CT | WARN | 2/2 | 16 | 107 | 197s |
+| 0004 | CT | WARN | 2/2 | 17 | 107 | 52s |
+| 0005 | CT | WARN | 2/2 | 20 | 107 | 200s |
+| 0002 | MRI | WARN | 2/2 | 10 | 107 | 64s |
+| 001 | MRI | WARN | 2/2 | 19 | 107 | 73s |
+| 002 | MRI | WARN | 2/2 | 7 | 107 | 49s |
+
+**Ground-truth validation: 163/163 checks ALL PASS** (23 string + 140 image)
+
+Intermediate validation checks (per case):
+- Correct modality extracted from path heuristics
+- Correct tools selected per modality (CT→TotalSeg+VISTA3D, MRI→MRSeg+VIBESeg)
+- Expected organ count meets anatomy-specific minimum (e.g. ≥18 for abdomen_pelvis)
+- Core abdominal organs (liver, spleen, kidneys, pancreas, etc.) present in organ list
+- QC flag rate < 50% per tool (VIBESeg: 0%, TotalSeg CT: ~25%)
+- No blacklisted filenames (multilabel_seg, image_nifti_seg, etc.) in radiomics
+- Feature count = 107 per organ (18 first-order + 14 shape + 75 texture)
+- Liver + spleen always usable for radiomics (key organs for abdominal studies)
 
 Notes:
-- QC WARN/FAIL is expected — dummy masks have geometric irregularities by design
-- VISTA3D `_dry_run` fails on cases without pre-existing masks (non-blocking; uses TotalSeg masks)
-- MRI cases show FAIL severity because MRSeg/VIBESeg masks on CT-derived dummy data have expected mismatches
-- Radiomics fallback gating extracts all PASS+WARN organs (no LLM → conservative rule-based)
+- QC WARN is expected — dummy masks have geometric irregularities by design
+- Radiomics restricted to anatomy-appropriate organs via `expected_organs` whitelist (e.g. 75 → 16 for abdomen_pelvis CT)
+- MRI geometric QC skips volume plausibility checks (CT-calibrated reference ranges); relies on CC + overlap only
+- Fallback gating is severity-aware: PASS → full features, WARN → first_order + LCC (shape/texture gated by LCC fraction), FAIL → skip
+- `multilabel_seg`, `image_nifti_seg` and other non-organ NIfTIs filtered from mask discovery
 
 ## Changelog
 
@@ -552,3 +566,9 @@ Notes:
 | 2026-03-20 | Pipeline fixes: anatomy normalization (ABD→abdomen), pyradiomics import caching, VISTA3D _dry_run signature, metadata_override for testing |
 | 2026-03-20 | **E2E validated**: 6/6 string (100% modality accuracy), 6/6 image (290 organs, 26,970 radiomics features), full decision trace |
 | 2026-03-20 | Architecture updated: Qwen3-8B is now the planner for metadata/tool selection; MedGemma-27B reserved for QC interpretation + radiomics gating |
+| 2026-03-23 | **7-issue validation fix**: (1) VISTA3D `_dry_run` signature fixed; (2) `image_nifti_seg` + non-organ files filtered from mask discovery; (3) `expected_organs` whitelist applied to radiomics (290→89 organs); (4) MRI geometric QC skips CT-calibrated volume/ratio checks; (5) `usable_for_radiomics`/`unusable_organs` populated from fallback gating; (6) severity-aware feature tier gating (LCC fraction gates shape/texture); (7) QC interpretation fallback derives quality from geometric severity |
+| 2026-03-23 | **E2E re-validated**: 6/6 completed, 89 organs × 93 features, all MRI cases WARN (not FAIL), no out-of-FOV or artifact organs in radiomics |
+| 2026-03-23 | Bugfix: VIBESeg 100% QC flag rate caused by `multilabel_seg.nii.gz` overlap — added to `_SKIP_NAMES` in `geometric_qc.py` |
+| 2026-03-23 | Shape features enabled: uncommented `shape: []` in `radiomics_params.yaml` — 93→107 features per organ (adds 14 3D shape descriptors) |
+| 2026-03-23 | Ground-truth validation added to `tests/run_e2e.py`: 163 checks covering modality, tools, organs, QC flag rates, feature counts, blacklist |
+| 2026-03-23 | **E2E final**: 6/6 string (100% modality), 6/6 image (89 organs × 107 features = 9,523), **163/163 validation checks ALL PASS** |

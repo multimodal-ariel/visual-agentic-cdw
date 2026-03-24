@@ -41,7 +41,7 @@ class QCInterpreter:
         max_tokens: Maximum tokens for LLM generation (default 2048).
     """
 
-    def __init__(self, llm: PlannerLLM, max_tokens: int = 2048):
+    def __init__(self, llm: PlannerLLM, max_tokens: int = 4096):
         self.llm = llm
         self.max_tokens = max_tokens
 
@@ -98,7 +98,7 @@ class QCInterpreter:
         )
 
         try:
-            response = self.llm.query_json(prompt, max_new_tokens=self.max_tokens)
+            response = self.llm.query_json(system_prompt="", user_prompt=prompt, max_new_tokens=self.max_tokens)
             if response is None:
                 logger.warning("[%s] LLM returned no valid JSON for QC interpretation", tool_result.case_id)
                 # Derive quality from geometric severity instead of blindly defaulting
@@ -148,7 +148,7 @@ class QCInterpreter:
         )
 
         try:
-            response = self.llm.query_json(prompt, max_new_tokens=self.max_tokens)
+            response = self.llm.query_json(system_prompt="", user_prompt=prompt, max_new_tokens=self.max_tokens)
             if response is None:
                 logger.warning("[%s] LLM returned no valid JSON for radiomics gating", tool_result.case_id)
                 interp.notes = "LLM gating unavailable — using QC flags for fallback decisions"

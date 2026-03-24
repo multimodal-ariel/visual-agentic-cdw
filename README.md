@@ -62,6 +62,8 @@ python -m orchestrator.batch_runner \
 	--gpus 0,1 --workers 2
 ```
 
+Full server bring-up (multi-GPU) is summarized in `docs/deployment.md`.
+
 ## Running LLMs
 - Planner (metadata/tool selection): Qwen3-8B (fast, rule-following).
 - QC interpretation + radiomics gating: MedGemma-27B (clinical domain).
@@ -78,8 +80,11 @@ python -m orchestrator.batch_runner \
 
 ## Tests
 - Unit: `tests/test_base_tool.py`, `tests/test_qc.py`, `tests/test_llm_dry_run.py`.
-- E2E: `tests/run_e2e.py` (string/image/full modes) on dummy cases with decision trace.
+- E2E: `tests/run_e2e.py` (string/image/full modes) on 3 CT + 3 MRI dummy cases with full decision trace → `tests/results/e2e_report.json`.
+- Latest results (2026-03-23): 6/6 string (100% modality), 6/6 image (89 organs × 107 features = 9,523), **163/163 ground-truth validation checks ALL PASS**.
 
 ## Notes
 - One unified env will not work; always invoke via `conda run -n <env>` per tool.
 - BiomedParse3D is skipped (detectron2 CUDA fragility); VoxTell + SAT-Pro cover 3D text-prompted use cases.
+- MRI geometric QC skips volume/ratio checks (CT-calibrated); relies on CC + overlap + multi-tool agreement.
+- Detailed pipeline docs: see `PIPELINE.md`.

@@ -87,7 +87,8 @@ class ToolSelector:
 
     SYSTEM_PROMPT = (
         "You are a medical imaging pipeline planner. "
-        "Select tools based on the case metadata and return ONLY valid JSON."
+        "Select tools based on the case metadata and return ONLY valid JSON. "
+        "Do not include any reasoning or explanation outside the JSON."
     )
 
     def __init__(
@@ -138,7 +139,7 @@ class ToolSelector:
             raw = self.llm.query_json(
                 system_prompt=self.SYSTEM_PROMPT,
                 user_prompt=prompt,
-                max_new_tokens=1024,
+                max_new_tokens=4096,
                 temperature=0.1,
             )
         except Exception as e:
@@ -234,9 +235,9 @@ class ToolSelector:
                         fixed_tools=", ".join(fixed_tools) if fixed_tools else "none",
                     )
                     result = self.llm.query_json(
-                        system_prompt="You are a medical imaging anatomy expert. Return only valid JSON.",
+                        system_prompt="You are a medical imaging anatomy expert. Return only valid JSON. Do not use <think> tags.",
                         user_prompt=prompt,
-                        max_new_tokens=512,
+                        max_new_tokens=2048,
                         temperature=0.1,
                     )
                     organs = result.get("organs", []) if isinstance(result, dict) else []
@@ -253,12 +254,15 @@ class ToolSelector:
             return json.load(f)
 
     def _index_registry(self) -> tuple[set[str], dict[str, list[str]]]:
-        """Build a set of all valid tool names and a modality support map."""
+        """Build a set of all valid tool names and a modality support map.
+        Skips tools marked as deferred."""
         valid_names: set[str] = set()
         modality_map: dict[str, list[str]] = {}
 
         for section in ("fixed_class_tools", "text_promptable_tools", "label_prompted_tools"):
             for tool in self._registry.get(section, []):
+                if tool.get("deferred"):
+                    continue
                 name = tool.get("name", "")
                 if name:
                     valid_names.add(name)
@@ -277,20 +281,22 @@ class ToolSelector:
 
     def _fallback(self, modality: str) -> dict:
         """
-        Return a reasonable default when LLM fails.
-        For CT: run TotalSegmentator_CT.
-        For MRI: run MRSegmentator.
+        Return ALL registry-compatible tools when LLM fails.
+        Maximum coverage: every tool that supports the case modality.
         """
         primary = []
-        if modality == "CT" and "TotalSegmentator_CT" in self._valid_tool_names:
-            primary = ["TotalSegmentator_CT"]
-        elif modality == "MRI" and "MRSegmentator" in self._valid_tool_names:
-            primary = ["MRSegmentator"]
+        targeted = []
+        for name in sorted(self._valid_tool_names):
+            if self._tool_supports_modality(name, modality):
+                if name in _TEXT_PROMPTABLE:
+                    targeted.append({"tool": name, "organs": []})
+                else:
+                    primary.append(name)
 
         return {
             "primary_tools":   primary,
             "secondary_tools": [],
-            "targeted_tools":  [],
+            "targeted_tools":  targeted,
             "qc_organs":       [],
-            "reasoning":       "LLM failed — fallback selection applied.",
+            "reasoning":       f"LLM failed — fallback: all {modality}-compatible tools selected.",
         }

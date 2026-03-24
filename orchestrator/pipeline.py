@@ -314,31 +314,64 @@ class CasePipeline:
 
     # ── Step 2: Tool selection ──────────────────────────────────────────────
 
+    # Text-promptable tools that need organ lists from the planner
+    _TEXT_PROMPTABLE = {"VoxTell", "TextMedSeg3D"}
+
     def _step_tool_selection(
         self, metadata: dict, result: CaseResult
     ) -> List[str]:
+        """
+        Select tools for this case.
+
+        Always starts from the registry: ALL tools compatible with the case
+        modality are selected (maximum coverage, the core design principle).
+
+        If an LLM planner is available, it can additionally provide targeted
+        organ prompts for text-promptable tools (VoxTell, TextMedSeg3D).
+        """
         t0 = time.time()
 
-        if self.no_llm:
-            tools = self._default_tools(metadata.get("modality", "CT"))
-        else:
-            from planner.tool_selector import ToolSelector
-            selector = ToolSelector(self.planner_llm)
-            selection = selector.select(metadata)
-            tools = selection.get("primary_tools", []) + selection.get("secondary_tools", [])
+        # Base: all registry-compatible tools (always)
+        tools = self._all_compatible_tools(metadata.get("modality", "CT"))
 
+        # LLM refinement: get targeted organ prompts for text-promptable tools
+        targeted_organs: Dict[str, List[str]] = {}
+        if self.planner_llm is not None and not self.no_llm:
+            try:
+                from planner.tool_selector import ToolSelector
+                selector = ToolSelector(self.planner_llm)
+                selection = selector.select(metadata)
+                for entry in selection.get("targeted_tools", []):
+                    tool_name = entry.get("tool", "") if isinstance(entry, dict) else str(entry)
+                    organs = entry.get("organs", []) if isinstance(entry, dict) else []
+                    if tool_name:
+                        targeted_organs[tool_name] = organs
+            except Exception as e:
+                logger.warning("[%s] LLM tool selection refinement failed: %s", result.case_id, e)
+
+        result._targeted_tool_organs = targeted_organs
         result.step_times["tool_selection"] = round(time.time() - t0, 2)
-        logger.info("[%s] Selected tools: %s", result.case_id, tools)
+        logger.info("[%s] Selected tools (%d): %s", result.case_id, len(tools), tools)
         return tools
 
-    def _default_tools(self, modality: str) -> List[str]:
-        """Fallback tool selection when LLM is not available."""
-        if modality == "CT":
-            return ["TotalSegmentator_CT", "VISTA3D"]
-        elif modality == "MRI":
-            return ["MRSegmentator", "VIBESegmentator"]
-        else:
-            return ["TotalSegmentator_CT"]
+    def _all_compatible_tools(self, modality: str) -> List[str]:
+        """
+        Return ALL tools from the registry that support the given modality.
+        Maximum coverage — the original design principle.
+        """
+        if self._tool_registry is None:
+            self._tool_registry = _load_tool_registry()
+
+        tools = []
+        for category in ("fixed_class_tools", "text_promptable_tools", "label_prompted_tools"):
+            for entry in self._tool_registry.get(category, []):
+                name = entry.get("name", "")
+                if entry.get("deferred"):
+                    continue
+                supported = [m.upper() for m in entry.get("supported_modalities", [])]
+                if not supported or modality.upper() in supported:
+                    tools.append(name)
+        return tools
 
     # ── Step 3: Organ list generation ───────────────────────────────────────
 
@@ -406,12 +439,20 @@ class CasePipeline:
                 result.warnings.append(f"No class path for tool {tool_name}")
                 continue
 
+            # For text-promptable tools, use LLM-generated organ prompts if available,
+            # otherwise fall back to expected_organs from the organ list generator
+            targeted_organs = getattr(result, "_targeted_tool_organs", {})
+            if tool_name in self._TEXT_PROMPTABLE and targeted_organs.get(tool_name):
+                tool_organs = targeted_organs[tool_name]
+            else:
+                tool_organs = result.expected_organs
+
             inp = ToolInput(
                 image_path=image_path,
                 case_path=case_path,
                 modality=metadata.get("modality", "CT"),
                 anatomy=metadata.get("anatomy", "UNKNOWN"),
-                target_organs=result.expected_organs,
+                target_organs=tool_organs,
                 output_dir=seg_dir,
                 device=self.device,
             )
@@ -665,8 +706,12 @@ class CasePipeline:
                 )
 
         if not extract_list:
+            logger.info("[%s] No organs in extract_list after filtering — skipping radiomics", result.case_id)
             result.step_times["radiomics"] = round(time.time() - t0, 2)
             return
+
+        logger.info("[%s] Radiomics extract_list: %s", result.case_id,
+                     [e["organ"] for e in extract_list])
 
         # Use first available seg_dir
         seg_dir = None
@@ -686,10 +731,22 @@ class CasePipeline:
             # (pyradiomics import replaces our local radiomics package in sys.modules)
             extract_fn = _get_extract_pyradiomics()
 
+            # Build map of available masks in seg_dir for fuzzy matching
+            available_masks = {}
+            for f in os.listdir(seg_dir):
+                if f.endswith(".nii.gz"):
+                    name = f.replace(".nii.gz", "")
+                    available_masks[name] = os.path.join(seg_dir, f)
+
             for entry in extract_list:
                 organ = entry["organ"]
-                mask_path = os.path.join(seg_dir, f"{organ}.nii.gz")
-                if not os.path.isfile(mask_path):
+                mask_path = available_masks.get(organ)
+                if mask_path is None:
+                    # Try common name normalizations
+                    normalized = organ.replace(" ", "_").replace("-", "_").lower()
+                    mask_path = available_masks.get(normalized)
+                if mask_path is None:
+                    logger.debug("[%s] No mask found for organ '%s' in %s", result.case_id, organ, seg_dir)
                     continue
 
                 try:

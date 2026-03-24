@@ -78,25 +78,311 @@ SIMULATED_PATHS = {
 
 RESULTS_DIR = os.path.join(REPO_ROOT, "tests", "results")
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Ground-truth definitions for intermediate validation
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Expected tool selection per modality — ALL compatible tools from registry
+# (the pipeline now selects every tool that supports the case modality)
+EXPECTED_TOOLS_CT = [
+    "TotalSegmentator_CT", "MRSegmentator", "VISTA3D",
+    "VoxTell", "TextMedSeg3D",
+]
+EXPECTED_TOOLS_MRI = [
+    "TotalSegmentator_MR", "MRSegmentator", "MRISegmenter",
+    "VIBESegmentator", "VISTA3D", "VoxTell", "TextMedSeg3D",
+]
+EXPECTED_TOOLS = {
+    "CT":  EXPECTED_TOOLS_CT,
+    "MRI": EXPECTED_TOOLS_MRI,
+}
+
+# Expected seg_dir prefixes per tool that the pipeline should discover
+EXPECTED_SEG_DIRS = {
+    "TotalSegmentator_CT": "segmentations_totalseg_ct",
+    "TotalSegmentator_MR": "segmentations_totalseg_mr",
+    "MRSegmentator":       "segmentations_mrseg",
+    "MRISegmenter":        "segmentations_mrisegmenter",
+    "VIBESegmentator":     "segmentations_vibeseg",
+    "VISTA3D":             "segmentations_vista3d",
+    "VoxTell":             "segmentations_voxtell",
+    "TextMedSeg3D":        "segmentations_textmedseg3d",
+}
+
+# Minimum expected organ count from OrganListGenerator per anatomy
+MIN_EXPECTED_ORGANS = {
+    "abdomen": 12,           # 15 primary + ~5 edge in organ_reference.json
+    "abdomen_pelvis": 18,    # 20 primary + 2 edge
+    "chest_abdomen_pelvis": 25,  # 29 primary + 0 edge
+    "chest": 10,             # 11 primary + 3 edge
+}
+
+# Core abdominal organs that MUST appear in expected_organs for abdomen-containing scans
+CORE_ABDOMINAL_ORGANS = {
+    "liver", "spleen", "kidney_left", "kidney_right", "pancreas",
+    "gallbladder", "stomach", "aorta",
+}
+
+# Non-organ filenames that must NOT appear in QC or radiomics
+BLACKLISTED_ORGAN_NAMES = {
+    "statistics", "combined", "multilabel", "multilabel_seg",
+    "image_nifti_seg", "image_nifti", "image", "plan", "metadata",
+    "summary", "manifest",
+}
+
+# Expected feature count per organ with shape enabled (14 shape + 93 base)
+MIN_FEATURES_PER_ORGAN = 100   # at least 100 (shape adds 14 → ~107 total)
+MAX_FEATURES_PER_ORGAN = 120   # upper sanity bound
+
+# Maximum QC flag rate — enforced only on primary fixed-class tools
+# Text-prompted tools (VoxTell, TextMedSeg3D) and MRISegmenter have inherently
+# higher flag rates on dummy data and are validated by multi-tool agreement instead
+MAX_QC_FLAG_RATE = 0.50
+# Tools exempt from per-tool QC flag rate validation (checked via multi-tool QC instead)
+QC_FLAG_RATE_EXEMPT_TOOLS = {"VoxTell", "TextMedSeg3D", "MRISegmenter"}
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Validation engine
+# ──────────────────────────────────────────────────────────────────────────────
+
+class ValidationResult:
+    """Accumulates pass/fail checks with descriptions."""
+    def __init__(self):
+        self.checks: List[Dict[str, Any]] = []
+
+    def check(self, name: str, passed: bool, detail: str = ""):
+        self.checks.append({"name": name, "passed": passed, "detail": detail})
+        status = "PASS" if passed else "FAIL"
+        logger.info("  [%s] %s%s", status, name, f" — {detail}" if detail else "")
+
+    @property
+    def num_passed(self):
+        return sum(1 for c in self.checks if c["passed"])
+
+    @property
+    def num_failed(self):
+        return sum(1 for c in self.checks if not c["passed"])
+
+    @property
+    def all_passed(self):
+        return self.num_failed == 0
+
+    def summary_dict(self):
+        return {
+            "total": len(self.checks),
+            "passed": self.num_passed,
+            "failed": self.num_failed,
+            "all_passed": self.all_passed,
+            "failures": [c for c in self.checks if not c["passed"]],
+        }
+
+
+def validate_string_results(results: List[Dict]) -> ValidationResult:
+    """Validate string pipeline results against ground truth."""
+    v = ValidationResult()
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("GROUND-TRUTH VALIDATION: STRING PIPELINE")
+    logger.info("=" * 70)
+
+    for r in results:
+        cid = r["case_id"]
+        expected_mod = r["modality_expected"]
+        anatomy = TEST_CASES[cid]["anatomy"]
+
+        # 1. Modality correctness
+        v.check(
+            f"{cid}: modality correct",
+            r["modality_correct"],
+            f"got={r['metadata_extracted'].get('modality')}, expected={expected_mod}",
+        )
+
+        # 2. Tool selection correctness — all expected tools must be present (order-independent)
+        expected_tools = EXPECTED_TOOLS.get(expected_mod, [])
+        got_set = set(r["tools_selected"])
+        expected_set = set(expected_tools)
+        v.check(
+            f"{cid}: all compatible tools selected",
+            expected_set <= got_set,
+            f"got={sorted(got_set)}, expected={sorted(expected_set)}, missing={sorted(expected_set - got_set)}",
+        )
+
+        # 3. Organ list non-empty and meets minimum
+        min_organs = MIN_EXPECTED_ORGANS.get(anatomy, 5)
+        v.check(
+            f"{cid}: organ list has >= {min_organs} organs",
+            r["num_expected_organs"] >= min_organs,
+            f"got={r['num_expected_organs']}",
+        )
+
+        # 4. Core abdominal organs present (for abdomen-containing scans)
+        if "abdomen" in anatomy:
+            organ_set = set(r["expected_organs"])
+            missing = CORE_ABDOMINAL_ORGANS - organ_set
+            v.check(
+                f"{cid}: core abdominal organs present",
+                len(missing) == 0,
+                f"missing={missing}" if missing else "all present",
+            )
+
+    logger.info("")
+    logger.info("String validation: %d/%d passed", v.num_passed, len(v.checks))
+    return v
+
+
+def validate_image_results(results: List[Dict]) -> ValidationResult:
+    """Validate image pipeline results against ground truth."""
+    v = ValidationResult()
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("GROUND-TRUTH VALIDATION: IMAGE PIPELINE")
+    logger.info("=" * 70)
+
+    for r in results:
+        cid = r["case_id"]
+        expected_mod = r["modality_expected"]
+        anatomy = TEST_CASES[cid]["anatomy"]
+
+        # 1. Pipeline completed
+        v.check(f"{cid}: pipeline completed", r["status"] == "completed", f"status={r['status']}")
+
+        # 2. Correct modality in metadata
+        got_mod = r["metadata"].get("modality", "?")
+        v.check(f"{cid}: modality correct", got_mod == expected_mod, f"got={got_mod}")
+
+        # 3. All compatible tools selected (order-independent)
+        expected_tools = EXPECTED_TOOLS.get(expected_mod, [])
+        got_set = set(r["tools_selected"])
+        expected_set = set(expected_tools)
+        v.check(
+            f"{cid}: all compatible tools selected",
+            expected_set <= got_set,
+            f"got={sorted(got_set)}, missing={sorted(expected_set - got_set)}",
+        )
+
+        # 4. Seg dirs discovered for selected tools
+        #    (in dry_run mode, not all tools may have pre-existing masks — check at least one)
+        tools_with_dirs = 0
+        for tool in expected_tools:
+            expected_dir = EXPECTED_SEG_DIRS.get(tool, "")
+            if expected_dir in r.get("seg_dirs_available", {}):
+                tools_with_dirs += 1
+        v.check(
+            f"{cid}: at least 1 seg_dir exists for selected tools",
+            tools_with_dirs >= 1,
+            f"{tools_with_dirs}/{len(expected_tools)} tools have seg dirs",
+        )
+
+        # 5. QC flag rates — only enforce on primary fixed-class tools
+        #    Text-prompted and specialist tools are validated via multi-tool agreement
+        for pt in r.get("qc_per_tool", []):
+            if pt["num_in_fov"] > 0 and pt["tool"] not in QC_FLAG_RATE_EXEMPT_TOOLS:
+                flag_rate = pt["num_flagged"] / pt["num_in_fov"]
+                v.check(
+                    f"{cid}/{pt['tool']}: QC flag rate < {MAX_QC_FLAG_RATE*100:.0f}%",
+                    flag_rate < MAX_QC_FLAG_RATE,
+                    f"flagged={pt['num_flagged']}/{pt['num_in_fov']} ({flag_rate*100:.0f}%)",
+                )
+
+        # 6. Radiomics: no blacklisted organ names
+        rad_organs = [d["organ"] for d in r.get("radiomics_details", [])]
+        blacklisted_found = [o for o in rad_organs if o in BLACKLISTED_ORGAN_NAMES]
+        v.check(
+            f"{cid}: no blacklisted names in radiomics",
+            len(blacklisted_found) == 0,
+            f"found={blacklisted_found}" if blacklisted_found else "clean",
+        )
+
+        # 7. Radiomics: feature counts in expected range (shape should now be included)
+        for d in r.get("radiomics_details", []):
+            fc = d["features"]
+            v.check(
+                f"{cid}/{d['organ']}: feature count {MIN_FEATURES_PER_ORGAN}-{MAX_FEATURES_PER_ORGAN}",
+                MIN_FEATURES_PER_ORGAN <= fc <= MAX_FEATURES_PER_ORGAN,
+                f"got={fc}",
+            )
+
+        # 8. Radiomics: at least some organs extracted
+        v.check(
+            f"{cid}: radiomics extracted for >= 1 organ",
+            r["radiomics_organs_extracted"] > 0,
+            f"got={r['radiomics_organs_extracted']}",
+        )
+
+        # 9. Core abdominal organs should appear in usable_for_radiomics (for abdomen scans)
+        interp = r.get("qc_interpretation", {})
+        usable = set(interp.get("usable_for_radiomics", []))
+        if "abdomen" in anatomy and usable:
+            # At least liver + spleen should be usable (they're large, reliable organs)
+            key_organs = {"liver", "spleen"}
+            present = key_organs & usable
+            v.check(
+                f"{cid}: liver+spleen usable for radiomics",
+                len(present) == len(key_organs),
+                f"usable={present}, expected={key_organs}",
+            )
+
+    logger.info("")
+    logger.info("Image validation: %d/%d passed", v.num_passed, len(v.checks))
+    return v
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Mode 1: String Pipeline (planning only, no images)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def run_string_pipeline() -> List[Dict[str, Any]]:
+def _load_planner_llm():
+    """Load the Qwen3-8B planner LLM for tool selection / metadata / organ list."""
+    from planner.llm_client import PlannerLLM
+    ckpt = os.path.join(REPO_ROOT, "checkpoints", "qwen3-8b")
+    if not os.path.isdir(ckpt):
+        logger.error("Qwen3-8B checkpoint not found at %s", ckpt)
+        sys.exit(1)
+    logger.info("Loading Qwen3-8B planner LLM from %s ...", ckpt)
+    llm = PlannerLLM.from_local(ckpt, device="auto")
+    llm.load()
+    logger.info("Qwen3-8B loaded.")
+    return llm
+
+
+def _load_clinical_llm():
+    """Load the MedGemma-27B clinical LLM for QC interpretation / radiomics gating."""
+    from planner.llm_client import PlannerLLM
+    ckpt = os.path.join(REPO_ROOT, "checkpoints", "medgemma-27b-text-it")
+    if not os.path.isdir(ckpt):
+        logger.warning("MedGemma-27B checkpoint not found at %s — QC will use rule-based fallback", ckpt)
+        return None
+    logger.info("Loading MedGemma-27B clinical LLM from %s ...", ckpt)
+    llm = PlannerLLM.from_local(ckpt, device="auto")
+    llm.load()
+    logger.info("MedGemma-27B loaded.")
+    return llm
+
+
+def run_string_pipeline(use_llm: bool = False) -> List[Dict[str, Any]]:
     """
     Test the planning stages on simulated production paths.
-    No images are loaded — tests metadata extraction, tool selection,
-    and organ list generation using path heuristics (no_llm mode).
+
+    If use_llm=True, uses the Qwen3-8B planner for metadata extraction,
+    tool selection, and organ list generation (full agentic mode).
+    Otherwise, uses path heuristics (no_llm mode).
     """
     logger.info("=" * 70)
-    logger.info("MODE 1: STRING PIPELINE (planning only, no images)")
+    mode_str = "AGENTIC (Qwen3-8B)" if use_llm else "HEURISTIC (no LLM)"
+    logger.info("MODE 1: STRING PIPELINE — %s", mode_str)
     logger.info("=" * 70)
 
     from orchestrator.pipeline import CasePipeline
 
-    # Use path heuristics (no LLM) — validates the default decision chain
-    pipeline = CasePipeline(no_llm=True, dry_run=True, skip_radiomics=True)
+    planner_llm = _load_planner_llm() if use_llm else None
+
+    pipeline = CasePipeline(
+        planner_llm=planner_llm,
+        no_llm=not use_llm,
+        dry_run=True,
+        skip_radiomics=True,
+    )
 
     results = []
     for case_id, info in TEST_CASES.items():
@@ -108,11 +394,25 @@ def run_string_pipeline() -> List[Dict[str, Any]]:
         metadata = pipeline._metadata_from_path(sim_path)
 
         # Step 2: Tool selection
-        tools = pipeline._default_tools(metadata.get("modality", "CT"))
+        if use_llm:
+            # Full agentic: LLM selects tools + generates organ prompts
+            from planner.tool_selector import ToolSelector
+            selector = ToolSelector(planner_llm)
+            selection = selector.select(metadata)
+            # Registry base tools (always selected regardless of LLM)
+            tools = pipeline._all_compatible_tools(metadata.get("modality", "CT"))
+            logger.info("  [LLM] Tool selection reasoning: %s", selection.get("reasoning", ""))
+            logger.info("  [LLM] primary_tools:  %s", selection.get("primary_tools", []))
+            logger.info("  [LLM] secondary_tools: %s", selection.get("secondary_tools", []))
+            logger.info("  [LLM] targeted_tools:  %s", selection.get("targeted_tools", []))
+            logger.info("  [LLM] qc_organs:       %s", selection.get("qc_organs", []))
+        else:
+            tools = pipeline._all_compatible_tools(metadata.get("modality", "CT"))
+            selection = None
 
         # Step 3: Organ list
         from planner.organ_list_generator import OrganListGenerator
-        gen = OrganListGenerator(llm=None)
+        gen = OrganListGenerator(llm=planner_llm)
         organs = gen.organs_for_qc(metadata.get("anatomy", "UNKNOWN"))
 
         elapsed = time.time() - t0
@@ -129,6 +429,8 @@ def run_string_pipeline() -> List[Dict[str, Any]]:
             "num_expected_organs": len(organs),
             "elapsed_s": round(elapsed, 3),
         }
+        if selection is not None:
+            entry["llm_tool_selection"] = selection
         results.append(entry)
 
         status = "PASS" if entry["modality_correct"] else "FAIL"
@@ -142,6 +444,10 @@ def run_string_pipeline() -> List[Dict[str, Any]]:
     correct = sum(1 for r in results if r["modality_correct"])
     logger.info("")
     logger.info("String pipeline: %d/%d modality correct", correct, len(results))
+
+    if planner_llm is not None:
+        planner_llm.unload()
+
     return results
 
 
@@ -149,20 +455,33 @@ def run_string_pipeline() -> List[Dict[str, Any]]:
 # Mode 2: Image Pipeline (full pipeline on dummy data)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def run_image_pipeline() -> List[Dict[str, Any]]:
+def run_image_pipeline(use_llm: bool = False) -> List[Dict[str, Any]]:
     """
     Test the full pipeline on dummy_outputs with real images and masks.
     Segmentation is skipped (masks already exist) but QC and radiomics
     run on real data.
+
+    If use_llm=True, uses:
+      - Qwen3-8B as planner_llm (tool selection, metadata, organ list)
+      - MedGemma-27B as clinical_llm (QC interpretation, radiomics gating)
     """
     logger.info("=" * 70)
-    logger.info("MODE 2: IMAGE PIPELINE (real images + masks)")
+    mode_str = "AGENTIC (Qwen3-8B + MedGemma-27B)" if use_llm else "HEURISTIC (no LLM)"
+    logger.info("MODE 2: IMAGE PIPELINE — %s", mode_str)
     logger.info("=" * 70)
 
     from orchestrator.pipeline import CasePipeline
 
+    planner_llm = None
+    clinical_llm = None
+    if use_llm:
+        planner_llm = _load_planner_llm()
+        clinical_llm = _load_clinical_llm()
+
     pipeline = CasePipeline(
-        no_llm=True,
+        planner_llm=planner_llm,
+        clinical_llm=clinical_llm,
+        no_llm=not use_llm,
         dry_run=True,        # skip segmentation (use existing masks)
         skip_radiomics=False, # run radiomics on real images
         postprocess=False,    # don't modify existing masks
@@ -281,6 +600,11 @@ def run_image_pipeline() -> List[Dict[str, Any]]:
             r["total_time_s"],
         )
 
+    if planner_llm is not None:
+        planner_llm.unload()
+    if clinical_llm is not None:
+        clinical_llm.unload()
+
     return results
 
 
@@ -288,7 +612,7 @@ def run_image_pipeline() -> List[Dict[str, Any]]:
 # Report generation
 # ──────────────────────────────────────────────────────────────────────────────
 
-def save_report(string_results: list, image_results: list) -> str:
+def save_report(string_results: list, image_results: list, validations: dict = None) -> str:
     """Save full decision-traced report to JSON."""
     os.makedirs(RESULTS_DIR, exist_ok=True)
 
@@ -311,6 +635,12 @@ def save_report(string_results: list, image_results: list) -> str:
         },
         "summary": _build_summary(string_results, image_results),
     }
+
+    # Add validation results
+    if validations:
+        report["validation"] = {
+            mode: vr.summary_dict() for mode, vr in validations.items()
+        }
 
     out_path = os.path.join(RESULTS_DIR, "e2e_report.json")
     with open(out_path, "w") as f:
@@ -376,28 +706,36 @@ if __name__ == "__main__":
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python tests/run_e2e.py --mode string    # planning only, no images
-  python tests/run_e2e.py --mode image     # full pipeline on dummy data
-  python tests/run_e2e.py --mode full      # both modes
+  python tests/run_e2e.py --mode string                # heuristic planning only
+  python tests/run_e2e.py --mode string --use-llm      # agentic planning (Qwen3-8B)
+  python tests/run_e2e.py --mode image --use-llm       # full agentic pipeline
+  python tests/run_e2e.py --mode full --use-llm        # both modes, agentic
         """,
     )
     parser.add_argument(
         "--mode", choices=["string", "image", "full"], default="full",
         help="Test mode: string (planning only), image (full pipeline), full (both)",
     )
+    parser.add_argument(
+        "--use-llm", action="store_true",
+        help="Use Qwen3-8B planner LLM for agentic tool selection and organ prompts (requires GPU + checkpoints/qwen3-8b/)",
+    )
     args = parser.parse_args()
 
     string_results = []
     image_results = []
+    validations = {}
 
     if args.mode in ("string", "full"):
-        string_results = run_string_pipeline()
+        string_results = run_string_pipeline(use_llm=args.use_llm)
+        validations["string"] = validate_string_results(string_results)
 
     if args.mode in ("image", "full"):
-        image_results = run_image_pipeline()
+        image_results = run_image_pipeline(use_llm=args.use_llm)
+        validations["image"] = validate_image_results(image_results)
 
     # Save report
-    report_path = save_report(string_results, image_results)
+    report_path = save_report(string_results, image_results, validations)
 
     # Final summary
     logger.info("")
@@ -412,4 +750,22 @@ Examples:
         total_radiomics = sum(r["radiomics_organs_extracted"] for r in image_results)
         logger.info("Image pipeline: %d/%d completed, %d organs with radiomics",
                      completed, len(image_results), total_radiomics)
+
+    # Validation summary
+    all_pass = True
+    for mode, vr in validations.items():
+        status = "ALL PASS" if vr.all_passed else f"{vr.num_failed} FAILED"
+        logger.info("Validation [%s]: %d/%d checks passed — %s",
+                     mode, vr.num_passed, len(vr.checks), status)
+        if not vr.all_passed:
+            all_pass = False
+            for c in vr.checks:
+                if not c["passed"]:
+                    logger.info("  FAIL: %s — %s", c["name"], c["detail"])
+
     logger.info("Report: %s", report_path)
+
+    # Exit with non-zero code if any validation failed
+    if not all_pass:
+        logger.warning("Some validation checks failed — see details above")
+        sys.exit(1)

@@ -37,4 +37,4 @@ featureClass:
   glszm: []           # Gray Level Size Zone Matrix
   gldm: []            # Gray Level Dependence Matrix
   ngtdm: []           # Neighbouring Gray Tone Difference Matrix
-  # shape: []         # 3D shape features (requires 3D mask — disabled by default)
+  shape: []           # 3D shape features (14 descriptors: Elongation, Flatness, MeshVolume, Sphericity, etc.)

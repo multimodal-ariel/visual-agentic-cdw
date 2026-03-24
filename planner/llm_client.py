@@ -58,8 +58,13 @@ def _strip_json_fence(text: str) -> str:
 
 
 def _strip_think_blocks(text: str) -> str:
-    """Remove <think>...</think> reasoning blocks (Qwen3 thinking mode)."""
-    return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    """Remove <think>...</think> reasoning blocks (Qwen3 thinking mode).
+    Also handles unclosed <think> blocks (truncated output)."""
+    # Remove closed think blocks
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    # Remove unclosed think block (truncated — no </think> found)
+    text = re.sub(r"<think>.*$", "", text, flags=re.DOTALL).strip()
+    return text
 
 
 def _parse_json_from_response(text: str) -> dict:
@@ -175,9 +180,15 @@ class TransformersLLM(_BaseLLM):
         t0 = time.time()
 
         self._tokenizer = AutoTokenizer.from_pretrained(self.model_path)
+
+        # Use 'dtype' kwarg for transformers >= 5.x, fall back to 'torch_dtype'
+        import transformers
+        tf_major = int(transformers.__version__.split(".")[0])
+        dtype_kwarg = "dtype" if tf_major >= 5 else "torch_dtype"
+
         self._model = AutoModelForCausalLM.from_pretrained(
             self.model_path,
-            torch_dtype=dtype,
+            **{dtype_kwarg: dtype},
             device_map=self.device,
         )
         self._model.eval()
@@ -223,15 +234,22 @@ class TransformersLLM(_BaseLLM):
         messages.append({"role": "user", "content": user_prompt})
 
         # Tokenize using the model's chat template
-        input_ids = self._tokenizer.apply_chat_template(
+        tokenized = self._tokenizer.apply_chat_template(
             messages,
             add_generation_prompt=True,
             return_tensors="pt",
         )
 
+        # Handle both old (raw tensor) and new (BatchEncoding) transformers APIs
+        if isinstance(tokenized, dict) or hasattr(tokenized, "input_ids"):
+            input_ids = tokenized["input_ids"]
+        else:
+            input_ids = tokenized
+
         # Move to model's device
         device = next(self._model.parameters()).device
         input_ids = input_ids.to(device)
+        input_len = input_ids.shape[-1]
 
         generate_kwargs: dict = dict(
             input_ids=input_ids,
@@ -246,7 +264,7 @@ class TransformersLLM(_BaseLLM):
             output_ids = self._model.generate(**generate_kwargs)
 
         # Decode only the newly generated tokens
-        new_tokens = output_ids[0][input_ids.shape[-1]:]
+        new_tokens = output_ids[0][input_len:]
         response = self._tokenizer.decode(new_tokens, skip_special_tokens=True)
         return response.strip()
 

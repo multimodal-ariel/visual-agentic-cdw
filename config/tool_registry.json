@@ -74,7 +74,7 @@
       "name": "VIBESegmentator",
       "class": "tools.vibesegmentator.VIBESegmentatorTool",
       "description": "Full-body segmentation for MRI and CT. 72 anatomical structures (organs, vessels, muscles, bones, fat compartments, spinal structures). Trained on NAKO and UK Biobank. Works on multiple MRI sequences despite the name.",
-      "supported_modalities": ["MRI", "CT"],
+      "supported_modalities": ["MRI"],
       "supported_anatomies": ["all"],
       "supports_2d": false,
       "supports_3d": true,
@@ -124,6 +124,8 @@
       "conda_env": "cdw_biomedparse3d",
       "model_weights": "biomedparse_v2.ckpt (HuggingFace: microsoft/BiomedParse)",
       "notes": "CT input must be intensity-windowed and scaled to [0, 255]. Hydra config-based initialization.",
+      "deferred": true,
+      "deferred_reason": "detectron2 CUDA build too fragile; VoxTell + TextMedSeg3D provide equivalent 3D text-prompted coverage.",
       "reference": "BiomedParse v2, Microsoft Research, 2024",
       "github": "https://github.com/microsoft/BiomedParse",
       "version_verified": "v2 (Oct 2025)"
