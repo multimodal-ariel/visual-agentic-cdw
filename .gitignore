@@ -70,3 +70,7 @@ Thumbs.db
 
 # Jupyter Notebook
 .ipynb_checkpoints
+
+# Visualization outputs
+viz_output/
+viz_output_diff/
