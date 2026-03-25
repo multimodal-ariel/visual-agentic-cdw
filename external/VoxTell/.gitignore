@@ -1,0 +1,163 @@
+# ==============================================================================
+# Python
+# ==============================================================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Logs
+*.log
+
+# ==============================================================================
+# Virtual Environments
+# ==============================================================================
+
+venv/
+env/
+ENV/
+.venv/
+.python-version
+
+# ==============================================================================
+# IDEs and Editors
+# ==============================================================================
+
+# PyCharm / IntelliJ
+.idea/
+
+# Spyder
+.spyderproject
+
+# Rope
+.ropeproject
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# VS Code
+.vscode/
+
+# ==============================================================================
+# Environment Variables
+# ==============================================================================
+
+.env
+.env.local
+
+# ==============================================================================
+# Medical Imaging & Data Files
+# ==============================================================================
+
+# NIfTI files
+*.nii
+*.nii.gz
+
+# Image formats
+*.tif
+*.tiff
+*.bmp
+*.dcm
+
+# Numpy arrays
+*.npy
+*.npz
+*.memmap
+
+# Model files
+*.model
+*.pth
+*.pt
+*.ckpt
+*.h5
+*.weights
+
+# Pickle files
+*.pkl
+*.pickle
+
+# ==============================================================================
+# Documentation
+# ==============================================================================
+
+# Sphinx
+docs/_build/
+docs/_static/
+docs/_templates/
+
+# PDF documentation
+*.pdf
+
+# ==============================================================================
+# Miscellaneous
+# ==============================================================================
+
+# Compressed files
+*.zip
+*.tar
+*.tar.gz
+*.rar
+
+# XML files
+*.xml
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

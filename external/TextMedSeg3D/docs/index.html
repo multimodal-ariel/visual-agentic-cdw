@@ -1,0 +1,445 @@
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+  <!--
+  <script src="./resources/jsapi" type="text/javascript"></script>
+  <script type="text/javascript" async>google.load("jquery", "1.3.2");</script>
+ -->
+
+<style type="text/css">
+  @font-face {
+   font-family: 'Avenir Book';
+   src: url("./fonts/Avenir_Book.ttf"); /* File to be stored at your site */
+   }
+
+  body {
+    font-family: "Avenir Book", "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
+    font-weight:300;
+    font-size:14px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 800px;
+  }
+  h1 {
+    font-weight:300;
+  }
+  h2 {
+    font-weight:300;
+  }
+
+  p {
+    font-weight:300;
+    line-height: 1.4;
+  }
+
+  code {
+    font-size: 0.8rem;
+    margin: 0 0.2rem;
+    padding: 0.5rem 0.8rem;
+    white-space: nowrap;
+    background: #efefef;
+    border: 1px solid #d3d3d3;
+    color: #000000;
+    border-radius: 3px;
+  }
+
+  pre > code {
+    display: block;
+    white-space: pre;
+    line-height: 1.5;
+    padding: 0;
+    margin: 0;
+  }
+
+  pre.prettyprint > code {
+    border: none;
+  }
+
+
+  .container {
+        display: flex;
+        align-items: center;
+        justify-content: center
+  }
+  .image {
+        flex-basis: 40%
+  }
+  .text {
+        padding-left: 20px;
+        padding-right: 20px;
+  }
+
+  .disclaimerbox {
+    background-color: #eee;
+    border: 1px solid #eeeeee;
+    border-radius: 10px ;
+    -moz-border-radius: 10px ;
+    -webkit-border-radius: 10px ;
+    padding: 20px;
+  }
+
+  video.header-vid {
+    height: 140px;
+    border: 1px solid black;
+    border-radius: 10px ;
+    -moz-border-radius: 10px ;
+    -webkit-border-radius: 10px ;
+  }
+
+  img.header-img {
+    height: 140px;
+    border: 1px solid black;
+    border-radius: 10px ;
+    -moz-border-radius: 10px ;
+    -webkit-border-radius: 10px ;
+  }
+
+  img.rounded {
+    border: 0px solid #eeeeee;
+    border-radius: 10px ;
+    -moz-border-radius: 10px ;
+    -webkit-border-radius: 10px ;
+
+  }
+
+  a:link,a:visited
+  {
+    color: #1367a7;
+    text-decoration: none;
+  }
+  a:hover {
+    color: #208799;
+  }
+
+  td.dl-link {
+    height: 160px;
+    text-align: center;
+    font-size: 22px;
+  }
+
+  .layered-paper-big { /* modified from: http://css-tricks.com/snippets/css/layered-paper/ */
+    box-shadow:
+            0px 0px 1px 1px rgba(0,0,0,0.35), /* The top layer shadow */
+            5px 5px 0 0px #fff, /* The second layer */
+            5px 5px 1px 1px rgba(0,0,0,0.35), /* The second layer shadow */
+            10px 10px 0 0px #fff, /* The third layer */
+            10px 10px 1px 1px rgba(0,0,0,0.35), /* The third layer shadow */
+            15px 15px 0 0px #fff, /* The fourth layer */
+            15px 15px 1px 1px rgba(0,0,0,0.35), /* The fourth layer shadow */
+            20px 20px 0 0px #fff, /* The fifth layer */
+            20px 20px 1px 1px rgba(0,0,0,0.35), /* The fifth layer shadow */
+            25px 25px 0 0px #fff, /* The fifth layer */
+            25px 25px 1px 1px rgba(0,0,0,0.35); /* The fifth layer shadow */
+    margin-left: 10px;
+    margin-right: 45px;
+  }
+
+
+  .layered-paper { /* modified from: http://css-tricks.com/snippets/css/layered-paper/ */
+    box-shadow:
+            0px 0px 1px 1px rgba(0,0,0,0.35), /* The top layer shadow */
+            5px 5px 0 0px #fff, /* The second layer */
+            5px 5px 1px 1px rgba(0,0,0,0.35), /* The second layer shadow */
+            10px 10px 0 0px #fff, /* The third layer */
+            10px 10px 1px 1px rgba(0,0,0,0.35); /* The third layer shadow */
+    margin-top: 5px;
+    margin-left: 10px;
+    margin-right: 30px;
+    margin-bottom: 5px;
+  }
+
+  .vert-cent {
+    position: relative;
+      top: 50%;
+      transform: translateY(-50%);
+  }
+
+  hr
+  {
+    border: 0;
+    height: 1px;
+    background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0));
+  }
+</style>
+
+	<title>Large-Vocabulary Segmentation for Medical Images with Text Prompts</title>
+</head>
+
+<body>
+	<br>
+	<center>
+	<span style="font-size:32px">Large-Vocabulary Segmentation for Medical Images with Text Prompts</span><br><br>
+	</center>
+
+  <table align="center" width="400px">
+    <tbody>
+      <tr>
+        <td align="center" width="400px">
+          <center>
+            <strong><span style="font-size:26px">npj Digital Medicine</span></strong>
+          </center>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  <br><br>
+  
+        <table align="center" width="720px">
+            <tbody><tr>
+
+                    <td align="center" width="160px">
+              <center>
+                <span style="font-size:16px"><a href="https://zhaoziheng.github.io/">Ziheng Zhao</a><sup>1,2</sup></span>
+                </center>
+                </td>
+
+                    <td align="center" width="160px">
+              <center>
+                <span style="font-size:16px"><a href="https://github.com/YaoZhang93">Yao Zhang</a><sup>2</sup></span>
+                </center>
+                </td>
+
+                    <td align="center" width="160px">
+              <center>
+                <span style="font-size:16px"><a href="https://chaoyi-wu.github.io/">Chaoyi Wu</a><sup>1,2</sup></span>
+                </center>
+                </td>
+
+                    <td align="center" width="160px">
+              <center>
+                <span style="font-size:16px"><a href="https://xiaoman-zhang.github.io/">Xiaoman Zhang</a><sup>1,2</sup></span>
+                </center>
+                </td>
+
+                    <td align="center" width="160px">
+              <center>
+                <span style="font-size:16px">Xiao Zhou</a><sup>2</sup></span>
+                </center>
+                </td>
+
+            </tr>
+
+        </tbody></table><br>
+
+        <table align="center" width="480px">
+            <tbody><tr>
+
+                    <td align="center" width="160px">
+              <center>
+                <span style="font-size:16px"><a href="https://mediabrain.sjtu.edu.cn/yazhang/">Ya Zhang</a><sup>1,2</sup></span>
+                </center>
+                </td>
+
+                    <td align="center" width="160px">
+              <center>
+                <span style="font-size:16px"><a href="https://mediabrain.sjtu.edu.cn/">Yanfeng Wang</a><sup>1,2</sup></span>
+                </center>
+                </td>
+
+                    <td align="center" width="160px">
+              <center>
+                <span style="font-size:16px"><a href="https://weidixie.github.io/">Weidi Xie</a><sup>1,2</sup></span>
+                </center>
+                </td>
+
+            </tr>
+
+        </tbody></table><br>
+
+	
+	      <table align="center" width="700px">
+            <tbody><tr>
+                    <td align="center" width="50px">
+              <center>
+                    <span style="font-size:16px"></span>
+                </center>
+                </td>
+                    <td align="center" width="300px">
+              <center>
+                    <span style="font-size:16px"><sup>1</sup>Shanghai Jiao Tong University</span>
+                </center>
+                </td>
+                    <td align="center" width="300px">
+              <center>
+                    <span style="font-size:16px"><sup>2</sup>Shanghai AI Laboratory</span>
+                </center>
+                </td>
+        </tr></tbody></table>
+	
+	    <table align="center" width="800px">
+            <tbody><tr>
+              <td align="center" width="200px">
+                <center>
+                  <br>
+                  <span style="font-size:20px">Code
+                    <a href="https://github.com/zhaoziheng/SAT"> [GitHub]</a>
+                  </span>
+                </center>
+              </td>
+
+	        <td align="center" width="200px">
+        	<center>
+                  <br>
+                  <span style="font-size:20px">Data
+                    <a href="https://github.com/zhaoziheng/SAT-DS/"> [Data]</a>
+                  </span>
+                </center>
+              </td>
+
+              <td align="center" width="200px">
+                <center>
+                  <br>
+                  <span style="font-size:20px">
+                    Paper  <a href="https://arxiv.org/abs/2312.17183"> [arXiv]</a>
+                  </span>
+                </center>
+              </td>
+
+              <td align="center" width="200px">
+                <center>
+                  <br>
+                  <span style="font-size:20px">
+                    Cite <a href="./cite.txt"> [BibTeX]</a>
+                  </span>
+                </center>
+              </td>
+            </tr></tbody>
+      </table>
+	
+      <br><hr>
+      <center><h2> Abstract </h2> </center>
+      <p style="text-align:justify; text-justify:inter-ideograph;">
+      <left>
+	      This paper aims to build a model that can Segment Anything in 3D medical images, driven
+        by medical terminologies as Text prompts, termed as SAT. Our main contributions are three-fold: (i)
+        We construct the first multimodal knowledge tree on human anatomy, including 6502 anatomical
+        terminologies; Then, we build the largest and most comprehensive segmentation dataset for training,
+        collecting over 22K 3D scans from 72 datasets, across 497 classes, with careful standardization
+        on both image and label space; (ii) We propose to inject medical knowledge into a text encoder via
+        contrastive learning and formulate a large-vocabulary segmentation model that can be prompted by
+        medical terminologies in text form. (iii) We train SAT-Nano (110M parameters) and SAT-Pro (447M
+        parameters). SAT-Pro achieves comparable performance to 72 nnU-Nets—the strongest specialist models
+        trained on each dataset (over 2.2B parameters combined)—over 497 categories. Compared with the
+        interactive approach MedSAM, SAT-Pro consistently outperforms across all 7 human body regions with
+        +7.1% average Dice Similarity Coefficient (DSC) improvement, while showing enhanced scalability and
+        robustness. On 2 external (cross-center) datasets, SAT-Pro achieves higher performance than all baselines
+        (+3.7% average DSC), demonstrating superior generalization ability.
+        </left></p>
+        <table align="center" width="800px">
+              <tbody><tr>
+                <td align="center" width="600px">
+                  <center>
+                    <img style="width:800px" src='./resources/new_teaser.pdf'></img>
+                  </center>
+                </td>
+              </tr></tbody>
+        </table>
+	
+      <br><hr>
+      <center> <h2> Datasets </h2> </center>
+      <p><b><h3>Domain Knowledge</h3></b></p>
+      <p style="text-align:justify; text-justify:inter-ideograph;"><left>
+	     We construct a knowledge tree based on multiple medical knowledge source. 
+       It encompassing thousands of anatomy concepts and definitions throughout the human body. 
+       They are linked via the relations and additionally, some are further mapped to segmentations on the atlas images, 
+       demonstrating their visual features that may hardly be described purely by text.
+	    </left></p>
+      <table align="center" width="800px">
+          <tbody><tr>
+            <td align="center" width="600px">
+              <center>
+                <img style="width:800px" src='./resources/knowledge_source.pdf'></img>
+              </center>
+            </td>
+          </tr></tbody>
+      </table>
+
+      <p><b><h3>Segmentation Datasets</h3></b></p>
+      <p style="text-align:justify; text-justify:inter-ideograph;"><left>
+       To equip our universal segmentation model with the ability to handle segmentation tasks of different targets across various modalities and anatomical regions, 
+       we collect and integrate 72 diverse publicly available medical segmentation datasets, 
+       totaling 22,186 scans including both CT and MRI and 302,033 segmentation annotations, 
+       covering 497 anatomical structures and lesions spanning 8 different regions of the human body: Brain, Head and Neck, Upper Limb, Thorax, Abdomen, Plevis, and Lower Limb. 
+       The dataset collection is termed as <b>SAT-DS</b>. 
+       Detailed composition of the dataset are present in the paper.
+      </left></p>
+      <table align="center" width="800px">
+          <tbody><tr>
+            <td align="center" width="600px">
+              <center>
+                <img style="width:800px" src='./resources/wholebody_demonstration.pdf'></img>
+              </center>
+            </td>
+          </tr></tbody>
+      </table>
+      <br>
+      <hr>
+
+      <center><h2>Method</h2></center>
+      <p style="text-align:justify; text-justify:inter-ideograph;"><left>
+       Towards building up our universal segmentation model by text prompt, i.e., SAT, we consider two main stages, namely, <b>multimodal knowledge injection</b> (a) and <b>universal segmentation training</b> (b). 
+       In the first stage, we pair the data in the constructed knowledge tree into text-text or text-atlas segmentation pairs, 
+       and use them for visual-language pre-training, 
+       injecting rich multimodal medical domain knowledge into the visual and text encoders;
+       In the second stage, we build a universal segmentation model prompted by text. 
+       Here, the pretrained text encoder is applied to generate embedding for any anatomical target terminology as the text prompt for segmentation.
+      </left></p>
+      <table align="center" width="800px">
+          <tbody><tr>
+            <td align="center" width="800px">
+              <center>
+                <img style="width:800px" src='./resources/framework_wcy.pdf'></img>
+              </center>
+            </td>
+          </tr></tbody>
+      </table>
+      <br>
+      <hr>
+
+      <center><h2>Results</h2></center>
+
+      <p><b>A Generalist Model is Worth 72 Specialist Models</b></p> 
+      In the internal validation, we evaluate SAT-Nano and SAT-Pro on all the 72 segmentation datasets in the collection. 
+      As there is no appropriate benchmark for evaluating the universal segmentation model, 
+      we randomly split each dataset in the collection into 80% for training and 20% for testing.
+      We firstly take nnU-Net, U-Mamba and SwinUNETR as representative specialist methods and strong baselines for comparison. We train specialist models on each of the datasets, 
+      resulting in 72 nnU-Net/U-Mamba/SwinUNETR models with optimized configuration on each dataset.
+      In general, SAT-Pro shows comparable performance to the combination of 72 nnU-Net models, with only <b>1/5</b> model size.
+      <table align="center" width="800px">
+            <tbody><tr>
+              <td align="center" width="600px">
+                <center>
+                  <img style="width:800px" src='./resources/Figure3.pdf'></img>
+                </center>
+              </td>
+            </tr></tbody>
+      </table>
+
+      <p><b>Text-prompted Segmentation Can Be User-Friendly</b></p> 
+      Driven by text prompts, SAT outlines a novel paradigm for segmentation foundation model, as opposed to previous interactive approaches that rely on spatial prompts. 
+      This could save tremendous manual efforts from prompting in clinical applications. On performance, SAT-Pro consistently outperforms the
+      state-of-the-art interactive model MedSAM across 7 human body regions, while being robust to targets
+      with ambiguous spatial relationships.
+      <table align="center" width="800px">
+            <tbody><tr>
+              <td align="center" width="600px">
+                <center>
+                  <img style="width:800px" src='./resources/Figure4.pdf'></img>
+                </center>
+              </td>
+            </tr></tbody>
+      </table>
+
+      For more experiment results and interesting findings, please refer to our <a href="https://arxiv.org/abs/2312.17183">paper</a>.
+      
+      <center> <h2> Acknowledgements </h2> </center>
+      <p> 
+	      Based on a template by <a href="http://web.mit.edu/phillipi/">Phillip Isola</a> and <a href="http://richzhang.github.io/">Richard Zhang</a>.
+      </p>
+      <br>
+
+
+<br>
+</body>
+</html>

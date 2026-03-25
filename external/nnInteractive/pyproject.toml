@@ -1,0 +1,60 @@
+[project]
+name = "nnInteractive"
+version = "1.1.4"
+requires-python = ">=3.10"
+description = "Inference code for nnInteractive"
+readme = "readme.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Fabian Isensee", email = "f.isensee@dkfz-heidelberg.de"},
+    { name = "Helmholtz Imaging Applied Computer Vision Lab" }
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Healthcare Industry",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+keywords = [
+    'deep learning',
+    'image segmentation',
+    'semantic segmentation',
+    'medical image analysis',
+    'medical image segmentation',
+    'nnU-Net',
+    'nnunet'
+]
+dependencies = [
+    "nnunetv2>=2.6",
+    "torch>=2.6,<2.9.0",
+    "acvl-utils>=0.2.3,<0.3",  # 0.3 may bring breaking changes. Careful!
+    "batchgenerators>=0.25.1",
+]
+
+[project.urls]
+homepage = "https://github.com/MIC-DKFZ/nnInteractive"
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "ruff",
+    "pre-commit"
+]
+
+[build-system]
+requires = ["setuptools>=67.8.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.codespell]
+skip = '.git,*.pdf,*.svg'
+#
+# ignore-words-list = ''
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["nnInteractive*"]
