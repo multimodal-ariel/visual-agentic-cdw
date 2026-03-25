@@ -83,13 +83,13 @@ patch_nnunet() {
 
 setup_cdw_totalseg() {
     create_env cdw_totalseg
-    pip_in cdw_totalseg install torch torchvision --index-url "${CU128_URL}"
-    pip_in cdw_totalseg install $BLACKWELL_PKGS "sympy>=1.13.3"
-    pip_in cdw_totalseg install -e "${EXTERNAL}/TotalSegmentator"
-    pip_in cdw_totalseg install "nnunetv2==2.6.4" requests urllib3 pyarrow xmltodict pyyaml
+    pip_in cdw_totalseg torch torchvision --index-url "${CU128_URL}"
+    pip_in cdw_totalseg $BLACKWELL_PKGS "sympy>=1.13.3"
+    pip_in cdw_totalseg -e "${EXTERNAL}/TotalSegmentator"
+    pip_in cdw_totalseg "nnunetv2==2.6.4" requests urllib3 pyarrow xmltodict pyyaml
     # scikit-image and timm needed by TotalSegmentator custom_trainers
-    pip_in cdw_totalseg install scikit-image timm huggingface_hub
-    pip_in cdw_totalseg install "git+https://github.com/MIC-DKFZ/batchgeneratorsv2.git"
+    pip_in cdw_totalseg scikit-image timm huggingface_hub
+    pip_in cdw_totalseg "git+https://github.com/MIC-DKFZ/batchgeneratorsv2.git"
     # nnU-Net legacy checkpoint compatibility for PyTorch 2.6+
     patch_nnunet cdw_totalseg
     echo "[OK] cdw_totalseg ready."
@@ -97,54 +97,54 @@ setup_cdw_totalseg() {
 
 setup_cdw_mrseg() {
     create_env cdw_mrseg
-    pip_in cdw_mrseg install torch torchvision --index-url "${CU128_URL}"
-    pip_in cdw_mrseg install $BLACKWELL_PKGS "sympy>=1.13.3"
-    pip_in cdw_mrseg install -e "${EXTERNAL}/MRSegmentator"
+    pip_in cdw_mrseg torch torchvision --index-url "${CU128_URL}"
+    pip_in cdw_mrseg $BLACKWELL_PKGS "sympy>=1.13.3"
+    pip_in cdw_mrseg -e "${EXTERNAL}/MRSegmentator"
     # scikit-image required by batchgenerators (pulled from ~/.local if not in env)
-    pip_in cdw_mrseg install scikit-image
+    pip_in cdw_mrseg scikit-image
     patch_nnunet cdw_mrseg
     echo "[OK] cdw_mrseg ready."
 }
 
 setup_cdw_mriseg() {
     create_env cdw_mriseg
-    pip_in cdw_mriseg install torch torchvision --index-url "${CU128_URL}"
-    pip_in cdw_mriseg install $BLACKWELL_PKGS "sympy>=1.13.3"
-    pip_in cdw_mriseg install -e "${EXTERNAL}/MRISegmenter"
+    pip_in cdw_mriseg torch torchvision --index-url "${CU128_URL}"
+    pip_in cdw_mriseg $BLACKWELL_PKGS "sympy>=1.13.3"
+    pip_in cdw_mriseg -e "${EXTERNAL}/MRISegmenter"
     # scikit-image required by batchgenerators (pulled from ~/.local if not in env)
-    pip_in cdw_mriseg install scikit-image
+    pip_in cdw_mriseg scikit-image
     echo "[OK] cdw_mriseg ready."
 }
 
 setup_cdw_nvseg() {
     create_env cdw_nvseg
-    pip_in cdw_nvseg install "torch==2.10.0" torchvision --index-url "${CU128_URL}"
-    pip_in cdw_nvseg install $BLACKWELL_PKGS "sympy>=1.13.3"
-    pip_in cdw_nvseg install "monai[all]==1.5.0"
-    pip_in cdw_nvseg install "transformers==4.46.3"
-    pip_in cdw_nvseg install -e "${EXTERNAL}/NVSegmentCTMR"
+    pip_in cdw_nvseg "torch==2.10.0" torchvision --index-url "${CU128_URL}"
+    pip_in cdw_nvseg $BLACKWELL_PKGS "sympy>=1.13.3"
+    pip_in cdw_nvseg "monai[all]==1.5.0"
+    pip_in cdw_nvseg "transformers==4.46.3"
+    pip_in cdw_nvseg -e "${EXTERNAL}/NVSegmentCTMR"
     echo "[OK] cdw_nvseg ready."
 }
 
 setup_cdw_voxtell() {
     create_env cdw_voxtell
-    pip_in cdw_voxtell install torch torchvision --index-url "${CU128_URL}"
-    pip_in cdw_voxtell install $BLACKWELL_PKGS "sympy>=1.13.3"
-    pip_in cdw_voxtell install -e "${EXTERNAL}/VoxTell"
+    pip_in cdw_voxtell torch torchvision --index-url "${CU128_URL}"
+    pip_in cdw_voxtell $BLACKWELL_PKGS "sympy>=1.13.3"
+    pip_in cdw_voxtell -e "${EXTERNAL}/VoxTell"
     # VoxTell uses transformers which requires huggingface-hub <1.0; pin it
-    pip_in cdw_voxtell install "huggingface-hub>=0.34,<1.0" "tokenizers>=0.22,<=0.23"
+    pip_in cdw_voxtell "huggingface-hub>=0.34,<1.0" "tokenizers>=0.22,<=0.23"
     echo "[OK] cdw_voxtell ready."
 }
 
 setup_cdw_vibeseg() {
     create_env cdw_vibeseg
-    pip_in cdw_vibeseg install torch torchvision --index-url "${CU128_URL}"
-    pip_in cdw_vibeseg install $BLACKWELL_PKGS "sympy>=1.13.3"
+    pip_in cdw_vibeseg torch torchvision --index-url "${CU128_URL}"
+    pip_in cdw_vibeseg $BLACKWELL_PKGS "sympy>=1.13.3"
     # VIBESegmentator cannot be pip-installed (poetry build); add to sys.path at runtime
-    pip_in cdw_vibeseg install "TPTBox>=0.2.0" "ruamel.yaml" "configargparse" nibabel numpy scipy
-    pip_in cdw_vibeseg install "nnunetv2==2.6.4" scikit-image
+    pip_in cdw_vibeseg "TPTBox>=0.2.0" "ruamel.yaml" "configargparse" nibabel numpy scipy
+    pip_in cdw_vibeseg "nnunetv2==2.6.4" scikit-image
     # dynamic_network_architectures required transitively by nnU-Net; install explicitly
-    pip_in cdw_vibeseg install dynamic_network_architectures
+    pip_in cdw_vibeseg dynamic_network_architectures
     patch_nnunet cdw_vibeseg
     echo "[OK] cdw_vibeseg ready."
 }
@@ -158,13 +158,13 @@ setup_cdw_biomedparse3d() {
 
 setup_cdw_textmedseg() {
     create_env cdw_textmedseg
-    pip_in cdw_textmedseg install "torch==2.10.0" torchvision --index-url "${CU128_URL}"
-    pip_in cdw_textmedseg install $BLACKWELL_PKGS "sympy>=1.13.3"
-    pip_in cdw_textmedseg install "monai[all]" "transformers>=4.40.0"
+    pip_in cdw_textmedseg "torch==2.10.0" torchvision --index-url "${CU128_URL}"
+    pip_in cdw_textmedseg $BLACKWELL_PKGS "sympy>=1.13.3"
+    pip_in cdw_textmedseg "monai[all]" "transformers>=4.40.0"
     # SAT requirements
-    pip_in cdw_textmedseg install positional_encodings einops pandas openpyxl nibabel scipy
+    pip_in cdw_textmedseg positional_encodings einops pandas openpyxl nibabel scipy
     # SAT requires its own fork of dynamic-network-architectures (bundled in repo)
-    pip_in cdw_textmedseg install -e "${EXTERNAL}/TextMedSeg3D/model/dynamic-network-architectures-main"
+    pip_in cdw_textmedseg -e "${EXTERNAL}/TextMedSeg3D/model/dynamic-network-architectures-main"
     # Patch torch.load calls in SAT to add weights_only=False (PyTorch 2.6+ compat)
     sed -i 's/torch\.load(\(.*\), map_location=device)/torch.load(\1, map_location=device, weights_only=False)/g' \
         "${EXTERNAL}/TextMedSeg3D/model/build_model.py"
@@ -173,17 +173,17 @@ setup_cdw_textmedseg() {
 
 setup_cdw_llm() {
     create_env cdw_llm
-    pip_in cdw_llm install vllm --index-url "${CU128_URL}"
-    pip_in cdw_llm install "transformers>=4.50.0" accelerate
-    pip_in cdw_llm install fastapi uvicorn pydantic
+    pip_in cdw_llm vllm --index-url "${CU128_URL}"
+    pip_in cdw_llm "transformers>=4.50.0" accelerate
+    pip_in cdw_llm fastapi uvicorn pydantic
     echo "[OK] cdw_llm ready."
 }
 
 setup_cdw_radiomics() {
     create_env cdw_radiomics
     # PyRadiomics from GitHub (pip version is outdated)
-    pip_in cdw_radiomics install "git+https://github.com/AIM-Harvard/pyradiomics.git"
-    pip_in cdw_radiomics install SimpleITK nibabel scipy pandas numpy
+    pip_in cdw_radiomics "git+https://github.com/AIM-Harvard/pyradiomics.git"
+    pip_in cdw_radiomics SimpleITK nibabel scipy pandas numpy
     echo "[OK] cdw_radiomics ready."
 }
 
