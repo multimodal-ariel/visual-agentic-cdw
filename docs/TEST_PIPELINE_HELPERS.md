@@ -61,15 +61,20 @@ Tests the path-based heuristic (or LLM) that extracts modality, anatomy, is_diag
 
 ```bash
 python -c "
-from orchestrator.pipeline import CasePipeline
-import json
+from orchestrator.pipeline import CasePipeline, CaseResult
+from config.constants import IMAGE_FILENAME
+from pathlib import Path
+import json, os
 
 pipeline = CasePipeline(dry_run=True, no_llm=True)
 with open('/path/to/filelist_testing_remapped.json') as f:
     cases = json.load(f)
 
 for case_path in cases[:3]:  # test first 3
-    meta = pipeline._step_metadata(case_path)
+    case_id = Path(case_path).name
+    image_path = os.path.join(case_path, IMAGE_FILENAME)
+    result = CaseResult(case_id=case_id, case_path=case_path)
+    meta = pipeline._step_metadata(case_path, image_path, result)
     print(f'{case_path}: {meta}')
 "
 ```
@@ -83,12 +88,17 @@ Tests which segmentation tools get selected for a given case's metadata.
 ```bash
 python -c "
 from orchestrator.pipeline import CasePipeline, CaseResult
+from config.constants import IMAGE_FILENAME
 from pathlib import Path
+import os
 
 pipeline = CasePipeline(dry_run=True, no_llm=True)
 case_path = '/path/to/flattened/case'  # ← CHANGE THIS
-meta = pipeline._step_metadata(case_path)
-result = CaseResult(case_id=Path(case_path).name, case_path=case_path, metadata=meta)
+case_id = Path(case_path).name
+image_path = os.path.join(case_path, IMAGE_FILENAME)
+result = CaseResult(case_id=case_id, case_path=case_path)
+meta = pipeline._step_metadata(case_path, image_path, result)
+result.metadata = meta
 tools = pipeline._step_tool_selection(meta, result)
 print(f'Selected tools: {tools}')
 "
