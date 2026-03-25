@@ -122,7 +122,7 @@ setup_cdw_nvseg() {
     pip_in cdw_nvseg $BLACKWELL_PKGS "sympy>=1.13.3"
     pip_in cdw_nvseg "monai[all]==1.5.0"
     pip_in cdw_nvseg "transformers==4.46.3"
-    pip_in cdw_nvseg -e "${EXTERNAL}/NVSegmentCTMR"
+    # NVSegmentCTMR does not have a setup.py; the orchestrator will add it to sys.path at runtime.
     echo "[OK] cdw_nvseg ready."
 }
 
