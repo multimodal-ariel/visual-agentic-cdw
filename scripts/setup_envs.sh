@@ -173,7 +173,8 @@ setup_cdw_textmedseg() {
 
 setup_cdw_llm() {
     create_env cdw_llm
-    pip_in cdw_llm vllm --index-url "${CU128_URL}"
+    # Use --extra-index-url so pip can find vllm on PyPI and torch on the PyTorch index
+    pip_in cdw_llm vllm --extra-index-url "${CU128_URL}"
     pip_in cdw_llm "transformers>=4.50.0" accelerate
     pip_in cdw_llm fastapi uvicorn pydantic
     echo "[OK] cdw_llm ready."
