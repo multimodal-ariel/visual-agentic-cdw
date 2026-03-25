@@ -143,6 +143,8 @@
       "output_dir": "segmentations_textmedseg3d",
       "output_format": "per_organ_nifti",
       "conda_env": "cdw_textmedseg",
+      "deferred": true,
+      "deferred_reason": "dependency issues",
       "notes": "Input must be RAS orientation. JSONL format: {image, label_names, dataset, modality, orientation_code}. SAT-Pro (~34-62GB GPU); SAT-Nano (~24-36GB GPU).",
       "reference": "SAT: Segment Anything in Medical Images with Text, 2024",
       "github": "https://github.com/zhaoziheng/SAT",

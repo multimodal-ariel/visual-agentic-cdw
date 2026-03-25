@@ -56,6 +56,76 @@ _REGISTRY_PATH = Path(__file__).resolve().parent.parent / "config" / "tool_regis
 # Text-promptable tools that require an organ list
 _TEXT_PROMPTABLE = {"VoxTell", "TextMedSeg3D"}
 
+# ── Organ name normalization ─────────────────────────────────────────────────
+# Maps colloquial / plural LLM outputs → canonical organ_reference.json names.
+# Single-value entries map 1:1; list entries expand a plural into its parts.
+_ORGAN_NAME_MAP: dict[str, str | list[str]] = {
+    # Paired organs — plurals
+    "kidneys":        ["kidney_left", "kidney_right"],
+    "kidney":         ["kidney_left", "kidney_right"],
+    "adrenal glands": ["adrenal_gland_left", "adrenal_gland_right"],
+    "adrenal gland":  ["adrenal_gland_left", "adrenal_gland_right"],
+    "adrenals":       ["adrenal_gland_left", "adrenal_gland_right"],
+    # Lungs — expand to 5 lobes
+    "lungs":          ["lung_upper_lobe_left", "lung_lower_lobe_left",
+                       "lung_upper_lobe_right", "lung_middle_lobe_right",
+                       "lung_lower_lobe_right"],
+    "lung":           ["lung_upper_lobe_left", "lung_lower_lobe_left",
+                       "lung_upper_lobe_right", "lung_middle_lobe_right",
+                       "lung_lower_lobe_right"],
+    # Iliac vessels
+    "iliac arteries": ["iliac_artery_left", "iliac_artery_right"],
+    "iliac veins":    ["iliac_vena_left", "iliac_vena_right"],
+    # Common aliases
+    "bladder":         "urinary_bladder",
+    "ivc":             "inferior_vena_cava",
+    "portal vein":     "portal_vein_and_splenic_vein",
+    "splenic vein":    "portal_vein_and_splenic_vein",
+    "small intestine": "small_bowel",
+    "intestines":      ["small_bowel", "colon"],
+    "bowel":           ["small_bowel", "colon"],
+    # Cardiac
+    "atria":           ["atrium_left", "atrium_right"],
+    "ventricles":      ["ventricle_left", "ventricle_right"],
+    "left ventricle":  "ventricle_left",
+    "right ventricle": "ventricle_right",
+    "left atrium":     "atrium_left",
+    "right atrium":    "atrium_right",
+    # Vascular
+    "thoracic aorta":  "aorta",
+    "superior vena cava": "superior_vena_cava",
+    "inferior vena cava": "inferior_vena_cava",
+    "hepatic artery":  "hepatic_artery",
+}
+
+
+def _normalize_organ_names(organs: list[str]) -> list[str]:
+    """Expand colloquial organ names to canonical organ_reference names.
+    Deduplicates and preserves order."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for name in organs:
+        # Try lookup with original, then lowercased, then with spaces→underscores
+        key = name.strip()
+        mapped = _ORGAN_NAME_MAP.get(key) or _ORGAN_NAME_MAP.get(key.lower())
+        if mapped is None:
+            # Convert spaces to underscores as a final normalization
+            canonical = key.lower().replace(" ", "_")
+            if canonical not in seen:
+                seen.add(canonical)
+                result.append(canonical)
+        elif isinstance(mapped, str):
+            if mapped not in seen:
+                seen.add(mapped)
+                result.append(mapped)
+        else:  # list
+            for m in mapped:
+                if m not in seen:
+                    seen.add(m)
+                    result.append(m)
+    return result
+
+
 # Prompt for organ-list generation for text-prompted tools
 _ORGAN_LIST_PROMPT = """\
 Given a medical imaging case with the following metadata:
@@ -70,7 +140,7 @@ List the specific anatomical structures that should be segmented given:
 3. Structures of clinical interest for rheumatology/lupus research (focus on joints, muscles, kidneys, organs at risk)
 
 Return a JSON object with:
-- organs: list of organ/structure names (use common anatomical names, lowercase, underscores for spaces)
+- organs: list of organ/structure names using canonical names: kidney_left (not "kidneys"), lung_upper_lobe_left (not "lungs"), adrenal_gland_left (not "adrenal glands"), urinary_bladder (not "bladder"), snake_case, singular, with laterality suffix for paired organs
 - reasoning: one sentence explaining why these structures were chosen"""
 
 
@@ -186,11 +256,16 @@ class ToolSelector:
         if not isinstance(qc_organs, list):
             qc_organs = []
 
+        # Normalize organ names to canonical form (kidney_left, not "kidneys")
+        for entry in targeted:
+            entry["organs"] = _normalize_organ_names(entry["organs"])
+        qc_organs = _normalize_organ_names([str(o) for o in qc_organs])
+
         return {
             "primary_tools":   primary,
             "secondary_tools": secondary,
             "targeted_tools":  targeted,
-            "qc_organs":       [str(o) for o in qc_organs],
+            "qc_organs":       qc_organs,
             "reasoning":       str(raw.get("reasoning", "")),
         }
 
@@ -241,7 +316,7 @@ class ToolSelector:
                         temperature=0.1,
                     )
                     organs = result.get("organs", []) if isinstance(result, dict) else []
-                    entry = {"tool": tool_name, "organs": [str(o) for o in organs]}
+                    entry = {"tool": tool_name, "organs": _normalize_organ_names([str(o) for o in organs])}
                 except Exception as e:
                     logger.warning("Organ prompt generation failed for %s: %s", tool_name, e)
             new_targeted.append(entry)

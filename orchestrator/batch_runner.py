@@ -349,6 +349,15 @@ if __name__ == "__main__":
 
     gpus = [int(g) for g in args.gpus.split(",")]
 
+    planner_llm = None
+    clinical_llm = None
+    if not args.no_llm:
+        from planner import PlannerLLM
+        planner_llm = PlannerLLM.from_local("checkpoints/qwen3-8b")
+        planner_llm.load()
+        clinical_llm = PlannerLLM.from_local("checkpoints/medgemma-27b-text-it")
+        clinical_llm.load()
+
     runner = BatchRunner(
         filelist=args.filelist,
         state_file=args.state_file,
@@ -356,9 +365,11 @@ if __name__ == "__main__":
         gpus=gpus,
         workers=args.workers,
         dry_run=args.dry_run,
-        no_llm=args.no_llm,
         skip_radiomics=args.skip_radiomics,
+        no_llm=args.no_llm,
         consensus=args.consensus,
+        planner_llm=planner_llm,
+        clinical_llm=clinical_llm,
     )
 
     summary = runner.run(retry_failed=args.retry_failed)

@@ -34,6 +34,7 @@ venv.bak/
 # Project Specific
 logs/
 *.log
+log*/
 checkpoints/
 data/
 datasets/

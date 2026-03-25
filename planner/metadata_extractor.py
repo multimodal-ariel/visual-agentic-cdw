@@ -105,7 +105,7 @@ class MetadataExtractor:
             result = self.llm.query_json(
                 system_prompt=self.SYSTEM_PROMPT,
                 user_prompt=prompt,
-                max_new_tokens=512,
+                max_new_tokens=256,
                 temperature=0.1,
             )
         except Exception as e:
@@ -144,7 +144,7 @@ class MetadataExtractor:
             results = self.llm.query_json(
                 system_prompt=self.SYSTEM_PROMPT,
                 user_prompt=prompt,
-                max_new_tokens=1024,
+                max_new_tokens=256,
                 temperature=0.1,
             )
             if not isinstance(results, list) or len(results) != len(cases):
@@ -185,26 +185,47 @@ class MetadataExtractor:
         if contrast not in _VALID_CONTRAST:
             contrast = "unknown"
 
+        is_diagnostic = bool(raw.get("is_diagnostic", True))
+
+        # Post LLM heuristic correction for is_diagnostic edge cases
+        # The LLM misses embedded markers (_cor_ mid-string, SUB_ prefix,
+        # Sagittal/Coronal concatenated without separators). Code catches these
+        # reliably in microseconds without burning tokens.
+        if is_diagnostic:
+            path_lower = file_path.lower()
+            non_diag_markers = [
+                "_cor_", "_cor.", "coronal", "sagittal",
+                "_sag_", "_sag.",
+                "_bw", "_bone",
+            ]
+            sub_markers = ["sub_", "_sub_", "_sub."]
+            if any(m in path_lower for m in non_diag_markers):
+                is_diagnostic = False
+                logger.debug("Post-LLM correction: %s → non-diagnostic (reformat marker)", file_path)
+            elif any(path_lower.endswith(m.rstrip(".")) or m in path_lower for m in sub_markers):
+                is_diagnostic = False
+                logger.debug("Post-LLM correction: %s → non-diagnostic (subtraction marker)", file_path)
+        
         return {
             "file_path":      file_path,
             "modality":       modality,
             "anatomy":        anatomy,
             "shape":          shape,
-            "is_diagnostic":  bool(raw.get("is_diagnostic", True)),
+            "is_diagnostic":  is_diagnostic,
             "series_type":    str(raw.get("series_type", "")),
             "contrast_status": contrast,
             "mri_sequence":   raw.get("mri_sequence"),  # None for non-MRI
         }
-
+        
     def _fallback(self, file_path: str) -> dict:
-        """Return a safe default metadata dict when LLM fails."""
-        return {
-            "file_path":      file_path,
-            "modality":       "UNKNOWN",
-            "anatomy":        "UNKNOWN",
-            "shape":          "3D",
-            "is_diagnostic":  True,
-            "series_type":    "",
-            "contrast_status": "unknown",
-            "mri_sequence":   None,
-        }
+        """Heuristic fallback when LLM fails - extracts modality and anatomy from a path."""
+        from orchestrator.pipeline import CasePipeline
+        meta = CasePipeline._metadata_from_path(None, file_path)
+        # supplement with defaults for the fields the heuristic cannot produce
+        meta.setdefault("file_path", file_path)
+        meta.setdefault("shape", "3D")
+        meta.setdefault("series_type", "")
+        meta.setdefault("mri_sequence", None)
+        logger.info("Fallback heuristic for %s: modality=%s anatompy=%s",
+                        file_path, meta.get("modality"), meta.get("anatomy"))
+        return meta

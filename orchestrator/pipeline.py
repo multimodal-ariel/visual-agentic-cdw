@@ -266,6 +266,9 @@ class CasePipeline:
 
         result.total_time_s = round(time.time() - t0, 2)
 
+        # save QC report
+        self._write_case_qc_report(result)
+
         # Save per-case log
         self._save_case_log(result)
 
@@ -303,7 +306,7 @@ class CasePipeline:
             modality = "PET_CT"
 
         anatomy = "UNKNOWN"
-        for region in ["ABD", "CHEST", "HEAD", "PELVIS", "SPINE", "NECK"]:
+        for region in ["ABD", "CHEST", "HEAD", "PELVIS", "SPINE", "NECK", "CARDIAC"]:
             if region in path_upper:
                 anatomy = region
                 break
@@ -318,6 +321,7 @@ class CasePipeline:
             "PELVIS": "pelvis", "SPINE": "spine", "NECK": "neck",
             "ABDOMEN_PELVIS": "abdomen_pelvis",
             "CHEST_ABDOMEN_PELVIS": "chest_abdomen_pelvis",
+            "CARDIAC": "cardiac"
         }
         anatomy = _ANATOMY_NORM.get(anatomy, anatomy)
 
@@ -467,7 +471,7 @@ class CasePipeline:
                 image_path=image_path,
                 case_path=case_path,
                 modality=metadata.get("modality", "CT"),
-                anatomy=metadata.get("anatomy", "UNKNOWN"),
+                anatomy=metadata.get("anatomy", "WHOLE_BODY"),
                 target_organs=tool_organs,
                 output_dir=seg_dir,
                 device=self.device,
@@ -707,7 +711,6 @@ class CasePipeline:
         result.step_times["qc_interpretation"] = round(time.time() - t0, 2)
 
     # ── Step 7: Radiomics extraction ────────────────────────────────────────
-
     def _step_radiomics(
         self,
         case_path: str,
@@ -769,43 +772,38 @@ class CasePipeline:
             result.step_times["radiomics"] = round(time.time() - t0, 2)
             return
 
+        extract_organs = {e["organ"]: e for e in extract_list}
         logger.info("[%s] Radiomics extract_list: %s", result.case_id,
-                     [e["organ"] for e in extract_list])
+                     list(extract_organs.keys()))
 
-        # Use first available seg_dir
-        seg_dir = None
-        for tool_name in result.selected_tools:
-            candidate = seg_dirs.get(tool_name)
-            if candidate and os.path.isdir(candidate):
-                seg_dir = candidate
-                break
-
-        if not seg_dir:
-            result.warnings.append("No valid seg_dir for radiomics extraction")
+        try:
+            extract_fn = _get_extract_pyradiomics()
+        except ImportError:
+            result.warnings.append("PyRadiomics not available in this environment")
             result.step_times["radiomics"] = round(time.time() - t0, 2)
             return
 
-        try:
-            # Cache at module level to survive sys.modules["radiomics"] swap
-            # (pyradiomics import replaces our local radiomics package in sys.modules)
-            extract_fn = _get_extract_pyradiomics()
+        # Extract from ALL available seg_dirs (each tool's output separately)
+        # Prefer "consensus" if present (it's prepended when --consensus is used)
+        all_radiomics_rows = []  # for CSV output
 
-            # Build map of available masks in seg_dir for fuzzy matching
+        for tool_name, seg_dir in seg_dirs.items():
+            if not seg_dir or not os.path.isdir(seg_dir):
+                continue
+
+            # Build map of available masks in this seg_dir
             available_masks = {}
             for f in os.listdir(seg_dir):
                 if f.endswith(".nii.gz"):
                     name = f.replace(".nii.gz", "")
                     available_masks[name] = os.path.join(seg_dir, f)
 
-            for entry in extract_list:
-                organ = entry["organ"]
+            for organ, entry in extract_organs.items():
                 mask_path = available_masks.get(organ)
                 if mask_path is None:
-                    # Try common name normalizations
                     normalized = organ.replace(" ", "_").replace("-", "_").lower()
                     mask_path = available_masks.get(normalized)
                 if mask_path is None:
-                    logger.debug("[%s] No mask found for organ '%s' in %s", result.case_id, organ, seg_dir)
                     continue
 
                 try:
@@ -816,17 +814,164 @@ class CasePipeline:
                     )
                     result.radiomics.append({
                         "organ": organ,
+                        "source_tool": tool_name,
                         "feature_count": rad_result.feature_count,
                         "features_allowed": entry.get("features_allowed", []),
                         "backend": rad_result.backend,
+                        "features": rad_result.features,
                     })
-                except Exception as e:
-                    result.warnings.append(f"Radiomics failed for {organ}: {e}")
 
-        except ImportError:
-            result.warnings.append("PyRadiomics not available in this environment")
+                    # Build flat row for CSV: case_id, organ, source_tool, feat1, feat2, ...
+                    row = {
+                        "case_id": result.case_id,
+                        "organ": organ,
+                        "source_tool": tool_name,
+                        "features_allowed": "|".join(entry.get("features_allowed", [])),
+                    }
+                    row.update(rad_result.features)
+                    all_radiomics_rows.append(row)
+
+                except Exception as e:
+                    result.warnings.append(f"Radiomics failed for {organ} ({tool_name}): {e}")
+
+        # Save per-case radiomics CSV to case directory
+        if all_radiomics_rows:
+            self._save_radiomics_csv(case_path, result.case_id, all_radiomics_rows)
 
         result.step_times["radiomics"] = round(time.time() - t0, 2)
+
+    def _save_radiomics_csv(
+        self, case_path: str, case_id: str, rows: List[Dict]
+    ) -> None:
+        """Write per-case radiomics features to CSV inside the case directory."""
+        import csv
+
+        csv_path = os.path.join(case_path, "radiomics_features.csv")
+        try:
+            # Collect all feature column names (union across all rows)
+            meta_cols = ["case_id", "organ", "source_tool", "features_allowed"]
+            feature_cols = sorted(
+                {k for row in rows for k in row if k not in meta_cols}
+            )
+            fieldnames = meta_cols + feature_cols
+
+            with open(csv_path, "w", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+                writer.writeheader()
+                writer.writerows(rows)
+
+            logger.info("[%s] Radiomics CSV saved: %s (%d rows, %d features)",
+                        case_id, csv_path, len(rows), len(feature_cols))
+        except Exception as e:
+            logger.warning("[%s] Failed to save radiomics CSV: %s", case_id, e)
+
+    # ── Save QC report ──────────────────────────────────────────────────────
+    def _write_case_qc_report(self, result: CaseResult) -> None:
+        """
+        Persist per-case QC report next to segmentation outputs.
+        Writes:
+        - <case_path>/qc_report.json
+        - <case_path>/qc_report.txt
+        """
+        if not result or not result.case_path:
+            return
+
+        os.makedirs(result.case_path, exist_ok=True)
+
+        payload = {
+            "case_id": result.case_id,
+            "case_path": result.case_path,
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+            "status": result.status,
+            "selected_tools": result.selected_tools,
+            "qc_report": result.qc_report or {},
+        }
+
+        json_path = os.path.join(result.case_path, "qc_report.json")
+        with open(json_path, "w") as f:
+            json.dump(payload, f, indent=2)
+        
+        txt_path = os.path.join(result.case_path, "qc_report.txt")
+        qc = result.qc_report or {}
+        interp = qc.get("interpretation", {})
+        agreement = qc.get("agreement", {})
+        per_tool = qc.get("per_tool", [])
+
+        with open(txt_path, "w") as f:
+            f.write("=== QC REPORT ===\n")
+            f.write(f"case_id: {result.case_id}\n")
+            f.write(f"case_path: {result.case_path}\n")
+            f.write(f"status: {result.status}\n")
+            f.write(f"selected_tools: {', '.join(result.selected_tools or [])}\n")
+            f.write(f"total_time_s: {result.total_time_s}\n\n")
+
+            f.write("== Overall QC ==\n")
+            f.write(f"overall_severity: {qc.get('overall_severity', 'N/A')}\n")
+            f.write(f"overall_quality: {interp.get('overall_quality', 'N/A')}\n")
+            f.write(f"explanation: {interp.get('explanation', interp.get('notes', 'N/A'))}\n\n")
+
+            f.write("== Multi-tool Agreement ==\n")
+            f.write(f"mean_dice: {agreement.get('mean_dice', 'N/A')}\n")
+            f.write(f"organs_agree: {agreement.get('organs_agree', 'N/A')}\n")
+            f.write(f"organs_disagree: {agreement.get('organs_disagree', 'N/A')}\n\n")
+
+            f.write("== Per-tool QC ==\n")
+            if per_tool:
+                for t in per_tool:
+                    f.write(
+                        f"- {t.get('tool','unknown')}: severity={t.get('severity','N/A')}, "
+                        f"in_fov={t.get('num_in_fov','N/A')}/{t.get('num_organs','N/A')}, "
+                        f"flagged={t.get('num_flagged','N/A')}, total_flags={t.get('total_flags','N/A')}\n"
+                    )
+            else:
+                f.write("No per-tool QC entries.\n")
+            f.write("\n")
+
+            f.write("== Radiomics Gating ==\n")
+            usable = interp.get("usable_for_radiomics", [])
+            unusable = interp.get("unusable_organs", [])
+            extract = interp.get("extract", [])
+            skip = interp.get("skip", [])
+
+            f.write(f"usable_for_radiomics_count: {len(usable)}\n")
+            f.write(f"unusable_organs_count: {len(unusable)}\n")
+            f.write(f"extract_count: {len(extract)}\n")
+            f.write(f"skip_count: {len(skip)}\n\n")
+
+            if usable:
+                f.write("usable_for_radiomics:\n")
+                for o in usable:
+                    f.write(f"  - {o}\n")
+                f.write("\n")
+
+            if unusable:
+                f.write("unusable_organs:\n")
+                for o in unusable:
+                    f.write(f"  - {o}\n")
+                f.write("\n")
+
+            if extract:
+                f.write("extract_plan:\n")
+                for e in extract:
+                    organ = e.get("organ", "unknown")
+                    fa = ", ".join(e.get("features_allowed", []))
+                    pp = ", ".join(e.get("postprocessing_needed", []))
+                    f.write(f"  - {organ}: features=[{fa}] postprocessing=[{pp}]\n")
+                f.write("\n")
+
+            if skip:
+                f.write("skip_plan:\n")
+                for s in skip:
+                    f.write(f"  - {s.get('organ','unknown')}: {s.get('reason','N/A')}\n")
+                f.write("\n")
+
+            f.write("== Raw Interpretation JSON ==\n")
+            try:
+                f.write(json.dumps(interp, indent=2))
+            except Exception:
+                f.write(str(interp))
+            f.write("\n")
+
 
     # ── Per-case log ────────────────────────────────────────────────────────
 
@@ -862,6 +1007,10 @@ class CasePipeline:
         except Exception as e:
             logger.warning("[%s] Failed to save case log: %s", result.case_id, e)
 
+    
+    # ── Save radiomics.csv ────────────────────────────────────────────────────
+
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Utilities
@@ -870,6 +1019,6 @@ class CasePipeline:
 def _has_masks(seg_dir: str) -> bool:
     """Check if a segmentation directory has at least one .nii.gz mask."""
     for f in os.listdir(seg_dir):
-        if f.endswith(".nii.gz") and f not in ("statistics.json",):
+        if f.endswith(".nii.gz") and "image_nifti" not in f:
             return True
     return False

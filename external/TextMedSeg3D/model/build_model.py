@@ -82,7 +82,7 @@ def inherit_knowledge_encoder(knowledge_encoder_checkpoint,
                               device
                               ):
     # inherit unet encoder and multiscale feature projection layer from knowledge encoder
-    checkpoint = torch.load(knowledge_encoder_checkpoint, map_location=device)
+    checkpoint = torch.load(knowledge_encoder_checkpoint, map_location=device, weights_only=False)
         
     model_dict =  model.state_dict()
     visual_encoder_state_dict = {k.replace('atlas_tower', 'backbone'):v for k,v in checkpoint['model_state_dict'].items() if 'atlas_tower.encoder' in k}    # encoder部分

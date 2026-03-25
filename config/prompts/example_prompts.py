@@ -30,10 +30,10 @@ Rules for is_diagnostic:
   * Scout or localizer
   * Screen save or screen capture
   * MIP, MinIP, or mIP projection
-  * Coronal or sagittal reformat (COR_, SAG_, _cor, _sag in series name)
-  * Bone window reconstruction (_BW, _BONE)
+  * Coronal or sagittal reformat — any of: COR_, _cor_, _cor, SAG_, _sag_, _sag, or the words "Coronal"/"Sagittal" anywhere in the name (case-insensitive)
+  * Bone window reconstruction (_BW, _BONE, _WB)
   * Metal artifact reduction (iMAR alone without a diagnostic base series)
-  * Subtraction maps (_SUB)
+  * Subtraction maps (_SUB or SUB_ — prefix or suffix)
   * Phase images (_Pha)
   * Fluoroscopy
   * PET NAC (non-attenuation corrected)
@@ -45,7 +45,9 @@ Rules for is_diagnostic:
 - Note: Lung window (_LW) is a valid diagnostic reconstruction
 
 File path: {file_path}
-Shape: {shape}"""
+Shape: {shape}
+
+/no_think"""
 
 
 # ============================================================================
@@ -88,17 +90,22 @@ Available tools (use these EXACT names in your response):
 - MRISegmenter: MRI only (3D). 62 structures. Specifically for T1-weighted abdominal MRI.
 - VIBESegmentator: MRI only (3D). 72 structures. Full torso. Works on multiple MRI sequences.
 - VISTA3D: CT and MRI (3D). 345+ structures including detailed brain parcellation.
-- TextMedSeg3D: CT, MRI, PET (3D). 497 text-prompted classes. Use for structures not covered by fixed-class tools.
 - VoxTell: CT, MRI, PET (3D). Free-text prompted. Use for targeted segmentation of specific structures.
+
+Organ naming convention (use these formats in targeted_tools organs and qc_organs):
+- Paired organs use _left/_right suffix: kidney_left, kidney_right, adrenal_gland_left, adrenal_gland_right
+- Lungs use lobe names: lung_upper_lobe_left, lung_lower_lobe_left, lung_upper_lobe_right, lung_middle_lobe_right, lung_lower_lobe_right
+- Bladder: urinary_bladder
+- Snake_case for multi-word: small_bowel, inferior_vena_cava, portal_vein_and_splenic_vein
 
 Selection rules (MANDATORY — follow these exactly):
 1. Put ALL modality-compatible fixed-class tools in primary_tools. Do NOT use secondary_tools.
 2. For CT: primary_tools MUST include TotalSegmentator_CT, MRSegmentator, VISTA3D
 3. For MRI: primary_tools MUST include TotalSegmentator_MR, MRSegmentator, MRISegmenter, VIBESegmentator, VISTA3D
-4. TextMedSeg3D and VoxTell ALWAYS go in targeted_tools (never in primary or secondary)
-5. For PET/CT: use CT-compatible tools on the CT component; add TextMedSeg3D/VoxTell for PET-specific structures
-6. For brain: always include VISTA3D (has detailed brain parcellation)
-7. Text-promptable tools (TextMedSeg3D, VoxTell) should include organ prompts for structures NOT covered by the fixed-class tools
+4. For PET_CT: primary_tools MUST include TotalSegmentator_CT, MRSegmentator, VISTA3D (same as CT — the CT component is segmented)
+5. VoxTell ALWAYS goes in targeted_tools (never in primary or secondary)
+6. targeted_tools MUST ALWAYS contain VoxTell with organ lists for structures supplementary to the fixed-class tools
+7. For brain: always include VISTA3D (has detailed brain parcellation)
 
 Case metadata:
 {case_metadata_json}
@@ -106,7 +113,7 @@ Case metadata:
 Return a JSON object with:
 - primary_tools: list of ALL compatible fixed-class tools (do NOT split into primary/secondary)
 - secondary_tools: always an empty list []
-- targeted_tools: list of text-promptable tools, each as {{"tool": "<name>", "organs": ["organ1", "organ2"]}}
+- targeted_tools: MUST contain TextMedSeg3D and VoxTell, each as {{"tool": "<name>", "organs": ["organ1", "organ2"]}} with organs supplementary to the fixed-class tools
 - qc_organs: list of organs to check in QC based on the detected anatomy
 - reasoning: one sentence explaining the selection"""
 

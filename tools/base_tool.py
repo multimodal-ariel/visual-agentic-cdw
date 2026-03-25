@@ -127,7 +127,7 @@ class BaseSegmentationTool(ABC):
             raise RuntimeError(
                 f"{self.__class__.__name__}: conda_env class attribute is not set."
             )
-        full_cmd = ["conda", "run", "-n", self.conda_env] + cmd
+        full_cmd = ["/home/soumitri/env/miniconda3/bin/conda", "run", "-n", self.conda_env] + cmd
         return subprocess.run(
             full_cmd,
             check=True,

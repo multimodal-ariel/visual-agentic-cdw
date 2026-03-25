@@ -55,26 +55,50 @@ After this, use `filelist_testing_remapped.json` for all subsequent commands. Th
 
 ---
 
-## 1. Metadata Extraction
+## 1.(a) Metadata Extraction using heuristic
 
-Tests the path-based heuristic (or LLM) that extracts modality, anatomy, is_diagnostic.
+Tests the path-based heuristic (hard-coded) that extracts modality, anatomy, is_diagnostic.
 
 ```bash
 python -c "
 from orchestrator.pipeline import CasePipeline, CaseResult
-from config.constants import IMAGE_FILENAME
+from config.constants import IMAGE_FILENAME, FILELIST_TESTING
 from pathlib import Path
 import json, os
 
 pipeline = CasePipeline(dry_run=True, no_llm=True)
-with open('/path/to/filelist_testing_remapped.json') as f:
+with open(FILELIST_TESTING) as f:
     cases = json.load(f)
 
-for case_path in cases[:3]:  # test first 3
+for case_path in cases:
     case_id = Path(case_path).name
     image_path = os.path.join(case_path, IMAGE_FILENAME)
     result = CaseResult(case_id=case_id, case_path=case_path)
     meta = pipeline._step_metadata(case_path, image_path, result)
+    print(f'{case_path}: {meta}')
+"
+```
+
+## 1.(b) Metadata Extraction using LLM Planner (Actual Pipeline should have this)
+
+Tests the LLM-driven modality, anatomy, is_diagnostic extraction
+
+```bash
+python -c "
+from planner.metadata_extractor import MetadataExtractor
+from planner import PlannerLLM
+import json, os
+from config.constants import IMAGE_FILENAME, FILELIST_TESTING
+
+planner = PlannerLLM.from_local('checkpoints/qwen3-8b')
+planner.load()
+extractor = MetadataExtractor(planner)
+
+with open(FILELIST_TESTING) as f:
+    cases = json.load(f)
+
+for case_path in cases:
+    meta = extractor.extract(os.path.join(case_path, IMAGE_FILENAME))
     print(f'{case_path}: {meta}')
 "
 ```
@@ -87,20 +111,27 @@ Tests which segmentation tools get selected for a given case's metadata.
 
 ```bash
 python -c "
-from orchestrator.pipeline import CasePipeline, CaseResult
-from config.constants import IMAGE_FILENAME
+from planner.metadata_extractor import MetadataExtractor
+from planner.tool_selector import ToolSelector
+from config.constants import IMAGE_FILENAME, FILELIST_TESTING
 from pathlib import Path
-import os
+import json, os
 
-pipeline = CasePipeline(dry_run=True, no_llm=True)
-case_path = '/path/to/flattened/case'  # ← CHANGE THIS
-case_id = Path(case_path).name
-image_path = os.path.join(case_path, IMAGE_FILENAME)
-result = CaseResult(case_id=case_id, case_path=case_path)
-meta = pipeline._step_metadata(case_path, image_path, result)
-result.metadata = meta
-tools = pipeline._step_tool_selection(meta, result)
-print(f'Selected tools: {tools}')
+from planner import PlannerLLM
+planner = PlannerLLM.from_local('checkpoints/qwen3-8b')
+planner.load()
+extractor = MetadataExtractor(planner)
+tool_selector = ToolSelector(planner)
+
+with open(FILELIST_TESTING) as f:
+    cases = json.load(f)
+
+for case_path in cases:
+    meta = extractor.extract(os.path.join(case_path, IMAGE_FILENAME))
+    tools = tool_selector.select(meta)
+    print(case_path)
+    print(f'{meta}; Selected tools: {tools}')
+    print()
 "
 ```
 
@@ -111,10 +142,21 @@ print(f'Selected tools: {tools}')
 Runs the entire pipeline for one case with mock segmentation outputs and rule-based fallbacks (no LLM, no GPU).
 
 ```bash
-python -c "
+/home/soumitri/env/miniconda3/bin/conda run -n cdw_llm python -c "
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3,4,5,6,7'
+
+CASE = '/data/soumitri/test_pipeline_outputs/data_soumitri_segmentations_3d_RHEUM_D2929C7B82D00B05C8168C95191919FB_20220209_MRI_ABDOMEN_W_WO_CONTRAST_TSE_T2_FS_iPAT_AX'
+
+from planner import PlannerLLM
+planner_llm = PlannerLLM.from_local('checkpoints/qwen3-8b')
+planner_llm.load()
+clinical_llm = PlannerLLM.from_local('checkpoints/medgemma-27b-text-it')
+clinical_llm.load()
+
 from orchestrator.pipeline import CasePipeline
-pipeline = CasePipeline(dry_run=True, no_llm=True)
-result = pipeline.run('/path/to/flattened/case')  # ← CHANGE THIS
+pipeline = CasePipeline(planner_llm=planner_llm, clinical_llm=clinical_llm, skip_radiomics=True)
+result = pipeline.run(CASE)  # ← CHANGE THIS
 print(f'Tools run: {result.selected_tools}')
 print(f'Tool outputs: {[t[\"tool_name\"] for t in result.tool_outputs]}')
 print(f'Status: {result.status}')
@@ -130,7 +172,7 @@ print(f'Time: {result.total_time_s}s')
 Runs Tier 1 (geometric per-tool) and Tier 2 (cross-tool agreement) QC on segmentation directories that already exist in a case directory.
 
 ```bash
-python -c "
+/home/soumitri/env/miniconda3/bin/conda run -n cdw_llm python -c "
 from qc.geometric_qc import GeometricQC
 from qc.multi_tool_qc import MultiToolQC
 import os

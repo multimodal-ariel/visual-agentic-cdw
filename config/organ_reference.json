@@ -54,21 +54,23 @@
     "stomach": 1, "duodenum": 1, "urinary_bladder": 1,
     "kidney_left": 1, "kidney_right": 1,
     "adrenal_gland_left": 1, "adrenal_gland_right": 1,
-    "heart": 1, "aorta": 1, "esophagus": 1, "trachea": 1,
+    "heart": 1, "atrium_left": 1, "ventricle_left": 1, "atrium_right": 1, "ventricle_right": 1,
+     "aorta": 1, "esophagus": 1, "trachea": 1,
     "inferior_vena_cava": 1,
     "lung_upper_lobe_left": 1, "lung_lower_lobe_left": 1,
     "lung_upper_lobe_right": 1, "lung_middle_lobe_right": 1,
-    "lung_lower_lobe_right": 1
+    "lung_lower_lobe_right": 1, "lung": 2
   },
 
   "anatomy_to_expected_organs": {
     "head": ["brain", "skull"],
     "neck": ["thyroid_gland", "esophagus", "trachea"],
+    "cardiac": ["heart", "atrium_left", "ventricle_left", "atrium_right", "ventricle_right", "ventricle_myocardium_left", "aorta"],
     "chest": [
       "lung_upper_lobe_left", "lung_lower_lobe_left",
       "lung_upper_lobe_right", "lung_middle_lobe_right", "lung_lower_lobe_right",
       "heart", "aorta", "pulmonary_artery", "trachea", "esophagus",
-      "inferior_vena_cava"
+      "lung"
     ],
     "abdomen": [
       "liver", "spleen", "kidney_left", "kidney_right", "pancreas",

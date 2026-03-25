@@ -38,10 +38,10 @@ class QCInterpreter:
 
     Args:
         llm: A PlannerLLM instance (default: local transformers; optional: vLLM).
-        max_tokens: Maximum tokens for LLM generation (default 2048).
+        max_tokens: Maximum tokens for LLM generation (default 8192).
     """
 
-    def __init__(self, llm: PlannerLLM, max_tokens: int = 4096):
+    def __init__(self, llm: PlannerLLM, max_tokens: int = 8192):
         self.llm = llm
         self.max_tokens = max_tokens
 
