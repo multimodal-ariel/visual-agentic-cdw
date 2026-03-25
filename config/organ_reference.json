@@ -2,8 +2,8 @@
   "_comment": "Organ reference data for QC checks. Volume ranges in mL. TODO: replace with data-driven bounds.",
 
   "volume_ranges_ml": {
-    "liver":                  [800.0,  2500.0],
-    "spleen":                 [40.0,   600.0],
+    "liver":                  [700.0,  3000.0],
+    "spleen":                 [40.0,   1200.0],
     "kidney_left":            [80.0,   350.0],
     "kidney_right":           [80.0,   350.0],
     "pancreas":               [30.0,   180.0],

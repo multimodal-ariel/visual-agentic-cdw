@@ -45,7 +45,9 @@ pip_in() {
     # Install packages using the conda env's own pip binary (avoids ~/.local clash)
     local ENV=$1
     shift
-    "/home/$USER/miniconda3/envs/$ENV/bin/pip" install "$@"
+    local CONDA_PREFIX
+    CONDA_PREFIX="$(conda info --base)"
+    "${CONDA_PREFIX}/envs/$ENV/bin/pip" install "$@"
 }
 
 create_env() {
@@ -60,7 +62,9 @@ create_env() {
 # ── Patch nnU-Net predict_from_raw_data.py ───────────────────────────────────
 patch_nnunet() {
     local ENV=$1
-    local SITE="/home/$USER/miniconda3/envs/$ENV/lib/python3.10/site-packages"
+    local CONDA_PREFIX
+    CONDA_PREFIX="$(conda info --base)"
+    local SITE="${CONDA_PREFIX}/envs/$ENV/lib/python3.10/site-packages"
     local FILE="${SITE}/nnunetv2/inference/predict_from_raw_data.py"
     if [ ! -f "$FILE" ]; then
         echo "[WARN] nnunetv2 not found in $ENV — skipping patch."
@@ -139,6 +143,8 @@ setup_cdw_vibeseg() {
     # VIBESegmentator cannot be pip-installed (poetry build); add to sys.path at runtime
     pip_in cdw_vibeseg install "TPTBox>=0.2.0" "ruamel.yaml" "configargparse" nibabel numpy scipy
     pip_in cdw_vibeseg install "nnunetv2==2.6.4" scikit-image
+    # dynamic_network_architectures required transitively by nnU-Net; install explicitly
+    pip_in cdw_vibeseg install dynamic_network_architectures
     patch_nnunet cdw_vibeseg
     echo "[OK] cdw_vibeseg ready."
 }
@@ -173,6 +179,14 @@ setup_cdw_llm() {
     echo "[OK] cdw_llm ready."
 }
 
+setup_cdw_radiomics() {
+    create_env cdw_radiomics
+    # PyRadiomics from GitHub (pip version is outdated)
+    pip_in cdw_radiomics install "git+https://github.com/AIM-Harvard/pyradiomics.git"
+    pip_in cdw_radiomics install SimpleITK nibabel scipy pandas numpy
+    echo "[OK] cdw_radiomics ready."
+}
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 ALL_ENVS=(
@@ -185,6 +199,7 @@ ALL_ENVS=(
     cdw_biomedparse3d
     cdw_textmedseg
     cdw_llm
+    cdw_radiomics
 )
 
 TARGET="${1:-all}"

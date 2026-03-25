@@ -19,10 +19,14 @@ conda --version   # tested with conda 24.x
 # 2. CUDA driver ≥ 12.x (checked with)
 nvidia-smi
 
-# 3. huggingface_hub CLI (for checkpoint downloads)
-pip install "huggingface_hub[cli]"
+# 3. Prevent user site-packages from interfering (critical on shared servers)
+export PYTHONNOUSERSITE=1
+echo 'export PYTHONNOUSERSITE=1' >> ~/.bashrc
 
-# 4. Login to HuggingFace (required for gated MedGemma model)
+# 4. huggingface_hub CLI (for checkpoint downloads)
+pip install -U "huggingface_hub[cli]"
+
+# 5. Login to HuggingFace (required for gated MedGemma model)
 huggingface-cli login
 ```
 
@@ -50,7 +54,7 @@ Current repos in `external/`:
 - `NVSegmentCTMR` — NVIDIA VISTA3D Python API (mirrors `checkpoints/NVSegmentCTMR`)
 - `TextMedSeg3D` — SAT / TextMedSeg3D
 - `TotalSegmentator` — TotalSegmentator (nnU-Net based)
-- `VIBESegmentator` — VIBESegmentator (spine segmentation)
+- `VIBESegmentator` — VIBESegmentator (full-body 72-structure CT+MRI segmentation)
 - `VoxTell` — DKFZ VoxTell
 
 ---
@@ -90,12 +94,21 @@ Or create them individually as documented below.
 conda create -n cdw_totalseg python=3.10 -y
 conda activate cdw_totalseg
 
+# PyTorch with CUDA 12.8
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+
+# Fix for RTX Blackwell / L40S (Ada Lovelace)
+pip install nvidia-cusparselt-cu12==0.7.1 nvidia-nvjitlink-cu12==12.8.93 "sympy>=1.13.3"
+
 # Install TotalSegmentator from local source
 pip install -e external/TotalSegmentator
 
 # Install remaining nnU-Net runtime deps
 pip install "nnunetv2==2.6.4"
 pip install requests urllib3 pyarrow xmltodict pyyaml
+
+# scikit-image and timm needed by TotalSegmentator custom_trainers
+pip install scikit-image timm huggingface_hub
 
 # batchgeneratorsv2 (not on PyPI — install from git)
 pip install "git+https://github.com/MIC-DKFZ/batchgeneratorsv2.git"
@@ -106,7 +119,7 @@ pip install "git+https://github.com/MIC-DKFZ/batchgeneratorsv2.git"
 - Weights are downloaded on first run to `~/.totalsegmentator/`.
 - If `~/.local/lib/python3.10/site-packages` has an older TotalSegmentator, it
   takes precedence over the conda env. Install directly into the conda env's pip
-  (`/home/$USER/miniconda3/envs/cdw_totalseg/bin/pip`) to avoid this.
+  (`"$(conda info --base)/envs/cdw_totalseg/bin/pip"`) to avoid this.
 
 ---
 
@@ -119,11 +132,14 @@ conda activate cdw_mrseg
 # Install from local source
 pip install -e external/MRSegmentator
 
-# PyTorch with CUDA 12.8 (required for Blackwell GPU)
+# PyTorch with CUDA 12.8 (required for Blackwell / L40S GPUs)
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 
-# Fix for RTX Blackwell (libcusparseLt dependency)
-pip install nvidia-cusparselt-cu12==0.7.1 nvidia-nvjitlink-cu12==12.8.93
+# scikit-image required by batchgenerators
+pip install scikit-image
+
+# Fix for RTX Blackwell / L40S (libcusparseLt dependency)
+pip install nvidia-cusparselt-cu12==0.7.1 nvidia-nvjitlink-cu12==12.8.93 "sympy>=1.13.3"
 
 # nnU-Net patch: allow loading legacy checkpoints in PyTorch 2.6+
 # Edit the following line in nnunetv2/inference/predict_from_raw_data.py:
@@ -156,11 +172,14 @@ conda activate cdw_mriseg
 # PyTorch with CUDA 12.8
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 
-# Fix for RTX Blackwell
-pip install nvidia-cusparselt-cu12==0.7.1 nvidia-nvjitlink-cu12==12.8.93
+# Fix for RTX Blackwell / L40S
+pip install nvidia-cusparselt-cu12==0.7.1 nvidia-nvjitlink-cu12==12.8.93 "sympy>=1.13.3"
 
 # Install MRISegmenter from local source
 pip install -e external/MRISegmenter
+
+# scikit-image required by batchgenerators
+pip install scikit-image
 ```
 
 **Notes:**
@@ -210,11 +229,14 @@ conda activate cdw_voxtell
 # PyTorch with CUDA 12.8
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 
-# Fix for RTX Blackwell
-pip install nvidia-cusparselt-cu12==0.7.1 nvidia-nvjitlink-cu12==12.8.93
+# Fix for RTX Blackwell / L40S
+pip install nvidia-cusparselt-cu12==0.7.1 nvidia-nvjitlink-cu12==12.8.93 "sympy>=1.13.3"
 
 # Install VoxTell from local source
 pip install -e external/VoxTell
+
+# VoxTell uses transformers which requires huggingface-hub <1.0
+pip install "huggingface-hub>=0.34,<1.0" "tokenizers>=0.22,<=0.23"
 ```
 
 **Notes:**
@@ -234,8 +256,8 @@ conda activate cdw_vibeseg
 # PyTorch with CUDA 12.8
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 
-# Fix for RTX Blackwell
-pip install nvidia-cusparselt-cu12==0.7.1 nvidia-nvjitlink-cu12==12.8.93
+# Fix for RTX Blackwell / L40S
+pip install nvidia-cusparselt-cu12==0.7.1 nvidia-nvjitlink-cu12==12.8.93 "sympy>=1.13.3"
 
 # VIBESegmentator cannot be pip-installed (uses poetry build system).
 # Instead, add it to sys.path at runtime (done in the tool runner).
@@ -243,13 +265,18 @@ pip install nvidia-cusparselt-cu12==0.7.1 nvidia-nvjitlink-cu12==12.8.93
 pip install "TPTBox>=0.2.0" "ruamel.yaml" "configargparse" nibabel numpy scipy
 
 # nnU-Net runtime
-pip install "nnunetv2==2.6.4"
+pip install "nnunetv2==2.6.4" scikit-image
+
+# dynamic_network_architectures — transitive dep of nnU-Net, must be explicit
+pip install dynamic_network_architectures
 ```
 
 **Notes:**
 - VIBESegmentator is added to `sys.path` at runtime via the runner (not installed).
 - Path: `external/VIBESegmentator` is injected into `sys.path` before import.
-- Outputs a multilabel NIfTI; the wrapper splits it per-organ.
+- Outputs a multilabel NIfTI (72 labels); the wrapper splits it per-organ.
+- Supports both CT and MRI modalities.
+- Apply the nnU-Net `weights_only=False` patch (same as cdw_totalseg/cdw_mrseg) — `setup_envs.sh` handles this automatically.
 
 ---
 
@@ -338,6 +365,26 @@ pip install fastapi uvicorn pydantic
 
 ---
 
+### `cdw_radiomics` — PyRadiomics (CPU only)
+
+```bash
+conda create -n cdw_radiomics python=3.10 -y
+conda activate cdw_radiomics
+
+# PyRadiomics from GitHub (pip version is outdated)
+pip install "git+https://github.com/AIM-Harvard/pyradiomics.git"
+
+# Required dependencies
+pip install SimpleITK nibabel scipy pandas numpy
+```
+
+**Notes:**
+- CPU-only environment — no PyTorch or GPU dependencies needed.
+- Used for radiomic feature extraction from segmentation masks + original volumes.
+- Features: first-order statistics, shape, GLCM, GLRLM, GLSZM, GLDM.
+
+---
+
 ## Step 3 — Environment Variables
 
 Set these in `config/constants.py` or your shell environment:
@@ -405,12 +452,19 @@ model.network.load_state_dict(state_dict)
 User site-packages in `~/.local/lib/python3.10/site-packages` take precedence
 over the conda env. Use the env's pip binary directly to avoid this:
 ```bash
-/home/$USER/miniconda3/envs/<env>/bin/pip install <package>
+# Use conda info --base to find the correct prefix (works on any system)
+"$(conda info --base)/envs/<env>/bin/pip" install <package>
 ```
 
 ### VoxTell output files not found
 VoxTell names output files `{input_stem}_{organ}.nii.gz`, not `{organ}.nii.gz`.
 The tool wrapper renames them automatically after inference.
+
+### VIBESegmentator `No module named 'dynamic_network_architectures'`
+This is a transitive dependency of nnU-Net that sometimes fails to install automatically:
+```bash
+conda run -n cdw_vibeseg pip install dynamic_network_architectures scikit-image
+```
 
 ### TextMedSeg3D `PlainConvUNet.__init__() missing num_classes`
 The PyPI `dynamic-network-architectures` added a `num_classes` argument that breaks SAT.

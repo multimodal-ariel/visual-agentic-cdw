@@ -1,0 +1,187 @@
+[
+  {
+    "case": "mr_001",
+    "success": true,
+    "original_shape": [
+      264,
+      264,
+      185
+    ],
+    "num_organs": 53,
+    "organs": {
+      "liver": {
+        "voxel_count": 592395,
+        "volume_ml": 1999.3,
+        "status": "OK"
+      },
+      "spleen": {
+        "voxel_count": 40124,
+        "volume_ml": 135.4,
+        "status": "OK"
+      },
+      "kidney_right": {
+        "voxel_count": 64342,
+        "volume_ml": 217.2,
+        "status": "OK"
+      },
+      "kidney_left": {
+        "voxel_count": 63306,
+        "volume_ml": 213.7,
+        "status": "OK"
+      },
+      "stomach": {
+        "voxel_count": 42067,
+        "volume_ml": 142.0,
+        "status": "OK"
+      },
+      "pancreas": {
+        "voxel_count": 22425,
+        "volume_ml": 75.7,
+        "status": "OK"
+      }
+    },
+    "all_organs": [
+      "spleen",
+      "kidney_right",
+      "kidney_left",
+      "gallbladder",
+      "liver",
+      "esophagus",
+      "stomach",
+      "aorta",
+      "inferior_vena_cava",
+      "portal_vein_and_splenic_vein",
+      "pancreas",
+      "adrenal_gland_right",
+      "adrenal_gland_left",
+      "lung_right",
+      "lung_left",
+      "small_bowel",
+      "duodenum",
+      "colon",
+      "iliac_artery_left",
+      "iliac_artery_right",
+      "iliac_vena_left",
+      "iliac_vena_right",
+      "gluteus_medius_left",
+      "gluteus_medius_right",
+      "autochthon_left",
+      "autochthon_right",
+      "iliopsoas_left",
+      "iliopsoas_right",
+      "hip_left",
+      "hip_right",
+      "sacrum",
+      "rib_left_5",
+      "rib_left_6",
+      "rib_left_7",
+      "rib_left_8",
+      "rib_left_9",
+      "rib_left_10",
+      "rib_left_11",
+      "rib_left_12",
+      "rib_right_6",
+      "rib_right_7",
+      "rib_right_8",
+      "rib_right_9",
+      "rib_right_10",
+      "rib_right_11",
+      "vertebrae_L5",
+      "vertebrae_L4",
+      "vertebrae_L3",
+      "vertebrae_L2",
+      "vertebrae_L1",
+      "vertebrae_T12",
+      "vertebrae_T11",
+      "vertebrae_T10"
+    ]
+  },
+  {
+    "case": "mr_002",
+    "success": true,
+    "original_shape": [
+      290,
+      290,
+      156
+    ],
+    "num_organs": 44,
+    "organs": {
+      "liver": {
+        "voxel_count": 746649,
+        "volume_ml": 2519.9,
+        "status": "OK"
+      },
+      "spleen": {
+        "voxel_count": 96408,
+        "volume_ml": 325.4,
+        "status": "OK"
+      },
+      "kidney_right": {
+        "voxel_count": 48352,
+        "volume_ml": 163.2,
+        "status": "OK"
+      },
+      "kidney_left": {
+        "voxel_count": 47599,
+        "volume_ml": 160.6,
+        "status": "OK"
+      },
+      "stomach": {
+        "voxel_count": 39619,
+        "volume_ml": 133.7,
+        "status": "OK"
+      },
+      "pancreas": {
+        "voxel_count": 26186,
+        "volume_ml": 88.4,
+        "status": "OK"
+      }
+    },
+    "all_organs": [
+      "spleen",
+      "kidney_right",
+      "kidney_left",
+      "gallbladder",
+      "liver",
+      "esophagus",
+      "stomach",
+      "aorta",
+      "inferior_vena_cava",
+      "portal_vein_and_splenic_vein",
+      "pancreas",
+      "adrenal_gland_right",
+      "adrenal_gland_left",
+      "lung_right",
+      "lung_left",
+      "small_bowel",
+      "duodenum",
+      "colon",
+      "autochthon_left",
+      "autochthon_right",
+      "iliopsoas_left",
+      "iliopsoas_right",
+      "rib_left_7",
+      "rib_left_8",
+      "rib_left_9",
+      "rib_left_10",
+      "rib_left_11",
+      "rib_right_5",
+      "rib_right_6",
+      "rib_right_7",
+      "rib_right_8",
+      "rib_right_9",
+      "rib_right_10",
+      "rib_right_11",
+      "rib_right_12",
+      "vertebrae_L3",
+      "vertebrae_L2",
+      "vertebrae_L1",
+      "vertebrae_T12",
+      "vertebrae_T11",
+      "vertebrae_T10",
+      "vertebrae_T9",
+      "vertebrae_T8",
+      "vertebrae_T7"
+    ]
+  }
+]

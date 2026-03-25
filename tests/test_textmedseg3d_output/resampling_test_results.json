@@ -1,0 +1,338 @@
+[
+  {
+    "case": "ct_0002",
+    "modality": "ct",
+    "success": true,
+    "original_shape": [
+      246,
+      246,
+      278
+    ],
+    "organs": {
+      "liver": {
+        "mask_shape": [
+          246,
+          246,
+          278
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 390540,
+        "volume_ml": 1318.1,
+        "status": "OK"
+      },
+      "spleen": {
+        "mask_shape": [
+          246,
+          246,
+          278
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 33040,
+        "volume_ml": 111.5,
+        "status": "OK"
+      },
+      "left kidney": {
+        "mask_shape": [
+          246,
+          246,
+          278
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 37682,
+        "volume_ml": 127.2,
+        "status": "OK"
+      },
+      "right kidney": {
+        "mask_shape": [
+          246,
+          246,
+          278
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 31810,
+        "volume_ml": 107.4,
+        "status": "OK"
+      },
+      "stomach": {
+        "mask_shape": [
+          246,
+          246,
+          278
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 468237,
+        "volume_ml": 1580.3,
+        "status": "OK"
+      },
+      "pancreas": {
+        "mask_shape": [
+          246,
+          246,
+          278
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 52,
+        "volume_ml": 0.2,
+        "status": "OK"
+      }
+    }
+  },
+  {
+    "case": "ct_0003",
+    "modality": "ct",
+    "success": true,
+    "original_shape": [
+      307,
+      307,
+      396
+    ],
+    "organs": {
+      "liver": {
+        "mask_shape": [
+          307,
+          307,
+          396
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 635082,
+        "volume_ml": 2143.4,
+        "status": "OK"
+      },
+      "spleen": {
+        "mask_shape": [
+          307,
+          307,
+          396
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 78678,
+        "volume_ml": 265.5,
+        "status": "OK"
+      },
+      "left kidney": {
+        "mask_shape": [
+          307,
+          307,
+          396
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 67046,
+        "volume_ml": 226.3,
+        "status": "OK"
+      },
+      "right kidney": {
+        "mask_shape": [
+          307,
+          307,
+          396
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 65090,
+        "volume_ml": 219.7,
+        "status": "OK"
+      },
+      "stomach": {
+        "mask_shape": [
+          307,
+          307,
+          396
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 1127400,
+        "volume_ml": 3805.0,
+        "status": "OK"
+      },
+      "pancreas": {
+        "mask_shape": [
+          307,
+          307,
+          396
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 22,
+        "volume_ml": 0.1,
+        "status": "OK"
+      }
+    }
+  },
+  {
+    "case": "mr_001",
+    "modality": "mri",
+    "success": true,
+    "original_shape": [
+      264,
+      264,
+      185
+    ],
+    "organs": {
+      "liver": {
+        "mask_shape": [
+          264,
+          264,
+          185
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 540602,
+        "volume_ml": 1824.5,
+        "status": "OK"
+      },
+      "spleen": {
+        "mask_shape": [
+          264,
+          264,
+          185
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 39980,
+        "volume_ml": 134.9,
+        "status": "OK"
+      },
+      "left kidney": {
+        "mask_shape": [
+          264,
+          264,
+          185
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 65080,
+        "volume_ml": 219.6,
+        "status": "OK"
+      },
+      "right kidney": {
+        "mask_shape": [
+          264,
+          264,
+          185
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 64028,
+        "volume_ml": 216.1,
+        "status": "OK"
+      },
+      "stomach": {
+        "mask_shape": [
+          264,
+          264,
+          185
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 43054,
+        "volume_ml": 145.3,
+        "status": "OK"
+      },
+      "pancreas": {
+        "mask_shape": [
+          264,
+          264,
+          185
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 21256,
+        "volume_ml": 71.7,
+        "status": "OK"
+      }
+    }
+  },
+  {
+    "case": "mr_002",
+    "modality": "mri",
+    "success": true,
+    "original_shape": [
+      290,
+      290,
+      156
+    ],
+    "organs": {
+      "liver": {
+        "mask_shape": [
+          290,
+          290,
+          156
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 621766,
+        "volume_ml": 2098.4,
+        "status": "OK"
+      },
+      "spleen": {
+        "mask_shape": [
+          290,
+          290,
+          156
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 70672,
+        "volume_ml": 238.5,
+        "status": "OK"
+      },
+      "left kidney": {
+        "mask_shape": [
+          290,
+          290,
+          156
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 51696,
+        "volume_ml": 174.5,
+        "status": "OK"
+      },
+      "right kidney": {
+        "mask_shape": [
+          290,
+          290,
+          156
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 52742,
+        "volume_ml": 178.0,
+        "status": "OK"
+      },
+      "stomach": {
+        "mask_shape": [
+          290,
+          290,
+          156
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 135918,
+        "volume_ml": 458.7,
+        "status": "OK"
+      },
+      "pancreas": {
+        "mask_shape": [
+          290,
+          290,
+          156
+        ],
+        "shape_match": true,
+        "affine_match": true,
+        "voxel_count": 29166,
+        "volume_ml": 98.4,
+        "status": "OK"
+      }
+    }
+  }
+]

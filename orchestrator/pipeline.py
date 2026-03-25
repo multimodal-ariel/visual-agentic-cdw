@@ -556,6 +556,7 @@ class CasePipeline:
                 if os.path.isdir(seg_dir):
                     t1 = self._gqc.run(
                         case_path, seg_dir, tool_name,
+                        expected_organs=result.expected_organs,
                         modality=modality,
                     )
                     report.tool_results.append(t1)

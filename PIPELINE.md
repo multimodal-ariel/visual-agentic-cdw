@@ -142,10 +142,10 @@ agentic_cdw/
 | Tool | Env | Modality | Structures | Status |
 |------|-----|----------|------------|--------|
 | TotalSegmentator_CT | cdw_totalseg | CT | 117 | ✓ Tested (0002, 0004) |
-| TotalSegmentator_MR | cdw_totalseg | MRI | 50 | wrapper done |
+| TotalSegmentator_MR | cdw_totalseg | MRI | 50 | ✓ Tested (001, 002) — 6/6 key organs, 50/50 total, shape/affine match |
 | MRSegmentator | cdw_mrseg | CT + MRI | 40 | ✓ Tested (CT + MRI) |
-| MRISegmenter | cdw_mriseg | MRI T1w abdominal | 62 | ✓ Tested (001, 002) |
-| VIBESegmentator | cdw_vibeseg | MRI + CT | 72 | ✓ Tested (001, 002) |
+| MRISegmenter | cdw_mriseg | MRI T1w abdominal | 62 | ✓ Tested (001, 002) — 6/6 key organs, 53/44 total, shape/affine match |
+| VIBESegmentator | cdw_vibeseg | MRI + CT | 72 | ✓ Tested (2 CT + 2 MR) — 6/6 key organs, 43-65 total, shape/affine match |
 | VISTA3D | cdw_nvseg | CT + MRI | 345+ | ✓ Tested (all 4 cases) |
 
 ### Text-promptable tools (LLM generates organ list at runtime)
@@ -153,7 +153,7 @@ agentic_cdw/
 | Tool | Env | Modality | Structures | Status |
 |------|-----|----------|------------|--------|
 | VoxTell | cdw_voxtell | CT / MRI / PET | open-set | ✓ Tested (0002, 002) |
-| TextMedSeg3D / SAT-Pro | cdw_textmedseg | CT / MRI / PET | 497 | ✓ Tested (0002, 001) |
+| TextMedSeg3D / SAT-Pro | cdw_textmedseg | CT / MRI / PET | 497 | ✓ Tested (2 CT + 2 MR) — resampling fix validated, 6/6 organs, shape/affine match |
 
 ### Deferred / skipped
 
@@ -520,6 +520,126 @@ Notes:
 - Fallback gating is severity-aware: PASS → full features, WARN → first_order + LCC (shape/texture gated by LCC fraction), FAIL → skip
 - `multilabel_seg`, `image_nifti_seg` and other non-organ NIfTIs filtered from mask discovery
 
+## Implementation Status & Design Deviations
+
+This section documents where the actual implementation differs from the original design plan, and why.
+
+### What is fully implemented and validated
+
+| Component | Status | Evidence |
+|-----------|--------|----------|
+| CasePipeline (9-step flow) | Complete | 6/6 E2E cases pass, 163/163 validation checks |
+| BatchRunner (GPU pool, resume) | Complete | Dry-run validated on dummy data, ThreadPoolExecutor + CaseTracker |
+| MetadataExtractor (LLM + path heuristic) | Complete | 100% modality accuracy on 6 test cases |
+| ToolSelector (registry-based) | Complete | All modality-compatible tools selected correctly |
+| OrganListGenerator (lookup + LLM fallback) | Complete | organ_reference.json covers standard anatomies |
+| GeometricQC (Tier 1) | Complete | Volume, CC, paired ratios, overlap — 29 organs |
+| MultiToolQC (Tier 2) | Complete | Pairwise Dice, volume divergence, STAPLE consensus |
+| QCInterpreter (Tier 3) | Complete | LLM interpretation + rule-based fallback gating |
+| PyRadiomics extraction | Complete | 107 features/organ, gated by QC |
+| Postprocessing (LCC + hole fill) | Complete | Applied automatically after segmentation |
+| 8 segmentation tools | Live-tested | TotalSeg CT, TotalSeg MR, MRSeg, MRISeg, VIBESeg, VISTA3D, VoxTell, SAT-Pro |
+
+### Design deviations from original plan
+
+**1. Tool selection: maximum coverage, not LLM-guided reduction**
+
+*Original plan:* LLM selects a subset of tools based on clinical reasoning.
+*Actual implementation:* Pipeline always selects ALL modality-compatible tools from `tool_registry.json`. The LLM's role in tool selection is limited to generating organ prompts for text-promptable tools (VoxTell, TextMedSeg3D). The `ToolSelector._fallback()` returns the complete set of compatible tools, and even when the LLM responds, the pipeline unions the LLM suggestion with the registry-based default.
+*Rationale:* More tools = better ensemble QC, more organ coverage, more robust cross-tool agreement metrics. The computational cost is acceptable given the clinical value of multi-tool consensus. Reducing tools is a premature optimization when QC depends on tool diversity.
+
+**2. MRI geometric QC: volume and ratio checks disabled**
+
+*Original plan:* Full geometric QC for all modalities.
+*Actual implementation:* Volume plausibility and paired organ ratio checks are skipped for MRI cases (`geometric_qc.py` lines 167, 184). Only connected component and overlap checks run for MRI.
+*Rationale:* Reference volume ranges in `organ_reference.json` are calibrated from CT data. MRI voxel intensities and tissue contrast differ enough that CT-derived volume expectations produce high false-positive rates on MRI. Rather than generating unreliable flags, we disable these checks and rely on CC + overlap + multi-tool agreement for MRI QC.
+
+**3. BiomedParse3D: skipped entirely**
+
+*Original plan:* Include BiomedParse3D as a text-prompted 3D segmentation tool.
+*Actual implementation:* Marked as `"deferred": true` in `tool_registry.json`. The conda env (`cdw_biomedparse3d`) is stubbed but the tool is never invoked.
+*Rationale:* detectron2 CUDA build is incompatible with Blackwell GPU driver (CUDA 12.9). VoxTell + TextMedSeg3D (SAT-Pro) provide equivalent text-prompted 3D coverage with 497+ classes — no capability gap from skipping BiomedParse3D.
+
+**4. cuRadiomics: demoted to optional**
+
+*Original plan:* GPU-accelerated radiomics extraction as primary backend.
+*Actual implementation:* `radiomics/curadiomics.py` exists but is not called from the pipeline. PyRadiomics (CPU) is the sole backend used in production.
+*Rationale:* cuRadiomics requires TensorFlow (originally built for TF 1.12 / CUDA 9.2), supports only GLCM + first-order (41 features, 2D per-slice), and adds significant dependency complexity. PyRadiomics provides 107 features (7 classes including 3D shape) at ~1-2s/organ on CPU — fast enough for production on ~5k diagnostic cases.
+
+**5. Resume granularity: case-level, not step-level**
+
+*Original plan:* (Implicit) resume at the exact step where a case failed.
+*Actual implementation:* `CaseTracker` tracks status per case (pending/running/completed/failed). If a case crashes mid-pipeline, re-running restarts from step 1 for that case. Segmentation is skip-if-exists (checks for existing masks), so re-running is not entirely wasteful, but QC and radiomics are fully re-computed.
+*Rationale:* Step-level checkpointing adds significant complexity for marginal benefit — segmentation (the expensive step) is already idempotent via skip-if-exists. QC and radiomics are fast enough (~seconds) to re-run.
+
+**6. TextMedSeg3D resampling: patched inference engine**
+
+*Original plan:* Use SAT out-of-the-box.
+*Actual implementation:* Patched `external/TextMedSeg3D/evaluate/inference_engine.py` and `data/inference_dataset.py` to load the original NIfTI affine/shape and resample SAT's predictions back to original image space via `nibabel.processing.resample_from_to(order=0)`.
+*Rationale:* SAT internally resamples inputs to its training resolution, producing output masks in a different voxel space than the input image. Without this patch, output masks have wrong shape/affine, breaking downstream QC and radiomics. Validated on 2 CT + 2 MR: all 24 masks match input space exactly.
+
+**7. Radiomics feature-tier gating: not enforced at extraction**
+
+*Original plan:* QC interpretation returns `features_allowed` per organ (e.g., `["first_order"]` only for organs with fragmentation), and radiomics extraction should respect this.
+*Actual implementation:* `QCInterpreter` returns `features_allowed` lists, but `extract_pyradiomics()` extracts all 107 features regardless. The gating decision is recorded in the QC report but not enforced at extraction time.
+*Rationale:* Extracting all features and filtering downstream is safer than silently dropping features — researchers can make their own gating decisions. The feature-tier gating should be enforced at the analysis stage, not the extraction stage.
+
+### Known limitations
+
+1. **Radiomics uses first available seg_dir only** — if the first tool's masks are incomplete, organs from other tools are missed. Silent degradation with no warning.
+2. **No validation of image/mask spatial alignment** — PyRadiomics assumes image and mask are in the same space. Misaligned inputs will error.
+3. **Organ name conflicts across tools** — tools use different naming (e.g., `kidney_right` vs `right kidney`). No canonical normalization layer exists yet.
+4. **STAPLE consensus generation implemented but not called** — `MultiToolQC.generate_consensus()` exists but the pipeline never invokes it. It's available for manual post-hoc analysis.
+
+## Future Work
+
+**1. LLM-guided tool reduction** (priority: low)
+
+Currently the pipeline runs ALL modality-compatible tools (maximum coverage). The `TOOL_SELECTION` prompt in `config/prompts/example_prompts.py` hardcodes "MUST include" rules that force all tools. To enable intelligent reduction:
+- Rewrite the prompt to allow the LLM to exclude tools whose organ coverage is a strict subset of another selected tool
+- Provide the LLM with per-tool organ lists and overlap statistics so it can reason about complementarity
+- Validate on dry examples: e.g., for MRI abdomen, does the LLM correctly keep MRISegmenter (62) + VIBESegmentator (72) but drop MRSegmentator (40, subset)?
+- *Current tradeoff:* maximum coverage enables better ensemble QC (Dice, STAPLE). Reducing tools saves ~30-50% runtime but weakens cross-tool validation. Worth revisiting when batch throughput becomes a bottleneck.
+
+**2. MRI-calibrated volume reference ranges** (priority: medium)
+
+Geometric QC volume plausibility and paired ratio checks are disabled for MRI (`geometric_qc.py`) because `organ_reference.json` ranges are CT-calibrated. To enable full QC on MRI:
+- Collect MRI volume statistics from a reference cohort (e.g., 100+ validated MRI segmentations)
+- Add `volume_range_mri_ml` fields to `organ_reference.json` alongside the existing CT ranges
+- Update `GeometricQC` to select the appropriate range by modality
+
+**3. Organ name canonicalization** (priority: medium)
+
+Tools use inconsistent naming (e.g., `kidney_right` vs `right kidney` vs `kidney_R`). Currently there is no normalization layer — cross-tool QC and radiomics aggregation rely on exact name matches. Future fix:
+- Build a canonical organ name mapping (tool-specific name → canonical name)
+- Apply at mask discovery time in `format_utils.py`
+- Enables reliable cross-tool Dice/STAPLE for all organs, not just those with coincidentally matching names
+
+**4. Multi-tool radiomics aggregation** (priority: high)
+
+Currently `pipeline.py` extracts radiomics from the first available `seg_dir` only. If that tool's masks are incomplete, organs segmented by other tools are silently missed. Fix:
+- Iterate over all tool seg_dirs, collecting the best mask per organ (e.g., QC-passing mask with highest LCC fraction)
+- Or use STAPLE consensus masks (see item 5) as the radiomics input
+
+**5. STAPLE consensus in production pipeline** (priority: medium)
+
+`MultiToolQC.generate_consensus()` is implemented but never called from `CasePipeline`. Integrating it would:
+- Produce a single fused mask per organ from multi-tool agreement
+- Provide a higher-quality input for radiomics than any single tool
+- Requires organ name canonicalization (item 3) to work across tools
+
+**6. Feature-tier gating enforcement** (priority: low)
+
+`QCInterpreter` returns `features_allowed` per organ (e.g., `["first_order"]` only for fragmented organs), but `extract_pyradiomics()` extracts all 107 features regardless. Current approach: extract everything, filter at analysis time. Future option: enforce gating at extraction to reduce storage and prevent accidental use of unreliable features.
+
+**7. Step-level resume** (priority: low)
+
+`CaseTracker` tracks case-level status only. If a case crashes after segmentation but before radiomics, re-running restarts the full pipeline (though segmentation is skip-if-exists). Step-level checkpointing would skip QC and radiomics re-computation, saving ~seconds per case. Low priority since segmentation is the expensive step and is already idempotent.
+
+**8. BiomedParse3D integration** (priority: low)
+
+Deferred due to detectron2 CUDA build incompatibility with Blackwell/Ada Lovelace. If detectron2 releases wheels compatible with CUDA 12.4+, re-enable `cdw_biomedparse3d`. No capability gap currently — VoxTell + TextMedSeg3D cover all text-prompted 3D use cases.
+
 ## Changelog
 
 | Date | Update |
@@ -572,3 +692,11 @@ Notes:
 | 2026-03-23 | Shape features enabled: uncommented `shape: []` in `radiomics_params.yaml` — 93→107 features per organ (adds 14 3D shape descriptors) |
 | 2026-03-23 | Ground-truth validation added to `tests/run_e2e.py`: 163 checks covering modality, tools, organs, QC flag rates, feature counts, blacklist |
 | 2026-03-23 | **E2E final**: 6/6 string (100% modality), 6/6 image (89 organs × 107 features = 9,523), **163/163 validation checks ALL PASS** |
+| 2026-03-24 | TextMedSeg3D resampling fix validated: 2 CT + 2 MR × 6 organs, all 24 masks match input shape/affine exactly |
+| 2026-03-24 | VIBESegmentator validated: 2 CT + 2 MR, 6/6 key organs on all cases, 43-65 total organs, shape/affine match; fixed missing deps (`dynamic_network_architectures`, `scikit-image`) in `cdw_vibeseg` |
+| 2026-03-24 | MRISegmenter validated: 2 MR, 6/6 key organs, 53/44 total organs, shape/affine match |
+| 2026-03-24 | Visualization fix: masks now placed in `segmentations_<tool>/` subdirectory to prevent `image_nifti.nii.gz` from being rendered as colored overlay |
+| 2026-03-24 | Added "Implementation Status & Design Deviations" section documenting 7 deviations from original design with rationale |
+| 2026-03-24 | Deployment documentation overhaul: `docs/deployment.md` and `docs/installation.md` rewritten for 8×L40S target with pre-flight checks, conda path detection, and missing env fixes |
+| 2026-03-24 | TotalSegmentator MR validated: 2 MR (001, 002), 50/50 organs both cases, 6/6 key organs, shape/affine match, ~13s/case |
+| 2026-03-24 | Added "Future Work" section to PIPELINE.md: 8 items including LLM-guided tool reduction, MRI QC ranges, organ canonicalization, multi-tool radiomics |

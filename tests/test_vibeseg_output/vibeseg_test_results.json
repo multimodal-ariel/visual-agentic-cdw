@@ -1,0 +1,389 @@
+[
+  {
+    "case": "ct_0002",
+    "success": true,
+    "original_shape": [
+      246,
+      246,
+      278
+    ],
+    "num_organs": 57,
+    "organs": {
+      "liver": {
+        "voxel_count": 401431,
+        "volume_ml": 1354.8,
+        "status": "OK"
+      },
+      "spleen": {
+        "voxel_count": 46648,
+        "volume_ml": 157.4,
+        "status": "OK"
+      },
+      "kidney_right": {
+        "voxel_count": 44604,
+        "volume_ml": 150.5,
+        "status": "OK"
+      },
+      "kidney_left": {
+        "voxel_count": 48136,
+        "volume_ml": 162.5,
+        "status": "OK"
+      },
+      "stomach": {
+        "voxel_count": 49092,
+        "volume_ml": 165.7,
+        "status": "OK"
+      },
+      "pancreas": {
+        "voxel_count": 22140,
+        "volume_ml": 74.7,
+        "status": "OK"
+      }
+    },
+    "all_organs": [
+      "spleen",
+      "kidney_right",
+      "kidney_left",
+      "gallbladder",
+      "liver",
+      "stomach",
+      "pancreas",
+      "adrenal_gland_right",
+      "lung_upper_lobe_left",
+      "lung_lower_lobe_left",
+      "lung_upper_lobe_right",
+      "lung_middle_lobe_right",
+      "lung_lower_lobe_right",
+      "esophagus",
+      "intestine",
+      "duodenum",
+      "urinary_bladder",
+      "prostate",
+      "sacrum",
+      "heart",
+      "aorta",
+      "pulmonary_vein",
+      "subclavian_artery_right",
+      "brachiocephalic_vein_right",
+      "superior_vena_cava",
+      "inferior_vena_cava",
+      "portal_vein_and_splenic_vein",
+      "iliac_artery_left",
+      "iliac_artery_right",
+      "iliac_vena_left",
+      "iliac_vena_right",
+      "scapula_left",
+      "scapula_right",
+      "femur_left",
+      "femur_right",
+      "hip_left",
+      "hip_right",
+      "spinal_cord",
+      "gluteus_maximus_left",
+      "gluteus_maximus_right",
+      "gluteus_medius_left",
+      "gluteus_medius_right",
+      "gluteus_minimus_left",
+      "gluteus_minimus_right",
+      "autochthon_left",
+      "autochthon_right",
+      "iliopsoas_left",
+      "iliopsoas_right",
+      "sternum",
+      "costal_cartilages",
+      "subcutaneous_fat",
+      "muscle",
+      "inner_fat",
+      "IVD",
+      "vertebra_body",
+      "vertebra_posterior_elements",
+      "spinal_channel"
+    ]
+  },
+  {
+    "case": "ct_0003",
+    "success": true,
+    "original_shape": [
+      307,
+      307,
+      396
+    ],
+    "num_organs": 65,
+    "organs": {
+      "liver": {
+        "voxel_count": 732224,
+        "volume_ml": 2471.3,
+        "status": "OK"
+      },
+      "spleen": {
+        "voxel_count": 93594,
+        "volume_ml": 315.9,
+        "status": "OK"
+      },
+      "kidney_right": {
+        "voxel_count": 69414,
+        "volume_ml": 234.3,
+        "status": "OK"
+      },
+      "kidney_left": {
+        "voxel_count": 109048,
+        "volume_ml": 368.0,
+        "status": "OK"
+      },
+      "stomach": {
+        "voxel_count": 243198,
+        "volume_ml": 820.8,
+        "status": "OK"
+      },
+      "pancreas": {
+        "voxel_count": 21030,
+        "volume_ml": 71.0,
+        "status": "OK"
+      }
+    },
+    "all_organs": [
+      "spleen",
+      "kidney_right",
+      "kidney_left",
+      "gallbladder",
+      "liver",
+      "stomach",
+      "pancreas",
+      "lung_upper_lobe_left",
+      "lung_lower_lobe_left",
+      "lung_upper_lobe_right",
+      "lung_middle_lobe_right",
+      "lung_lower_lobe_right",
+      "esophagus",
+      "trachea",
+      "intestine",
+      "duodenum",
+      "urinary_bladder",
+      "prostate",
+      "sacrum",
+      "heart",
+      "aorta",
+      "pulmonary_vein",
+      "subclavian_artery_right",
+      "subclavian_artery_left",
+      "brachiocephalic_vein_left",
+      "brachiocephalic_vein_right",
+      "atrial_appendage_left",
+      "superior_vena_cava",
+      "inferior_vena_cava",
+      "portal_vein_and_splenic_vein",
+      "iliac_artery_left",
+      "iliac_artery_right",
+      "iliac_vena_left",
+      "iliac_vena_right",
+      "humerus_left",
+      "humerus_right",
+      "scapula_left",
+      "scapula_right",
+      "clavicula_left",
+      "clavicula_right",
+      "femur_left",
+      "femur_right",
+      "hip_left",
+      "hip_right",
+      "spinal_cord",
+      "gluteus_maximus_left",
+      "gluteus_maximus_right",
+      "gluteus_medius_left",
+      "gluteus_medius_right",
+      "gluteus_minimus_left",
+      "gluteus_minimus_right",
+      "autochthon_left",
+      "autochthon_right",
+      "iliopsoas_left",
+      "iliopsoas_right",
+      "sternum",
+      "costal_cartilages",
+      "subcutaneous_fat",
+      "muscle",
+      "inner_fat",
+      "IVD",
+      "vertebra_body",
+      "vertebra_posterior_elements",
+      "spinal_channel",
+      "bone_other"
+    ]
+  },
+  {
+    "case": "mr_001",
+    "success": true,
+    "original_shape": [
+      264,
+      264,
+      185
+    ],
+    "num_organs": 46,
+    "organs": {
+      "liver": {
+        "voxel_count": 575323,
+        "volume_ml": 1941.7,
+        "status": "OK"
+      },
+      "spleen": {
+        "voxel_count": 43422,
+        "volume_ml": 146.5,
+        "status": "OK"
+      },
+      "kidney_right": {
+        "voxel_count": 64656,
+        "volume_ml": 218.2,
+        "status": "OK"
+      },
+      "kidney_left": {
+        "voxel_count": 62790,
+        "volume_ml": 211.9,
+        "status": "OK"
+      },
+      "stomach": {
+        "voxel_count": 64174,
+        "volume_ml": 216.6,
+        "status": "OK"
+      },
+      "pancreas": {
+        "voxel_count": 25724,
+        "volume_ml": 86.8,
+        "status": "OK"
+      }
+    },
+    "all_organs": [
+      "spleen",
+      "kidney_right",
+      "kidney_left",
+      "gallbladder",
+      "liver",
+      "stomach",
+      "pancreas",
+      "adrenal_gland_right",
+      "adrenal_gland_left",
+      "lung_upper_lobe_left",
+      "lung_lower_lobe_left",
+      "lung_middle_lobe_right",
+      "lung_lower_lobe_right",
+      "esophagus",
+      "intestine",
+      "duodenum",
+      "sacrum",
+      "heart",
+      "aorta",
+      "inferior_vena_cava",
+      "portal_vein_and_splenic_vein",
+      "iliac_artery_left",
+      "iliac_artery_right",
+      "iliac_vena_left",
+      "iliac_vena_right",
+      "hip_left",
+      "hip_right",
+      "spinal_cord",
+      "gluteus_maximus_left",
+      "gluteus_maximus_right",
+      "gluteus_medius_left",
+      "gluteus_medius_right",
+      "gluteus_minimus_left",
+      "autochthon_left",
+      "autochthon_right",
+      "iliopsoas_left",
+      "iliopsoas_right",
+      "sternum",
+      "costal_cartilages",
+      "subcutaneous_fat",
+      "muscle",
+      "inner_fat",
+      "IVD",
+      "vertebra_body",
+      "vertebra_posterior_elements",
+      "spinal_channel"
+    ]
+  },
+  {
+    "case": "mr_002",
+    "success": true,
+    "original_shape": [
+      290,
+      290,
+      156
+    ],
+    "num_organs": 43,
+    "organs": {
+      "liver": {
+        "voxel_count": 632850,
+        "volume_ml": 2135.8,
+        "status": "OK"
+      },
+      "spleen": {
+        "voxel_count": 72695,
+        "volume_ml": 245.3,
+        "status": "OK"
+      },
+      "kidney_right": {
+        "voxel_count": 48423,
+        "volume_ml": 163.4,
+        "status": "OK"
+      },
+      "kidney_left": {
+        "voxel_count": 48149,
+        "volume_ml": 162.5,
+        "status": "OK"
+      },
+      "stomach": {
+        "voxel_count": 195626,
+        "volume_ml": 660.2,
+        "status": "OK"
+      },
+      "pancreas": {
+        "voxel_count": 31506,
+        "volume_ml": 106.3,
+        "status": "OK"
+      }
+    },
+    "all_organs": [
+      "spleen",
+      "kidney_right",
+      "kidney_left",
+      "gallbladder",
+      "liver",
+      "stomach",
+      "pancreas",
+      "adrenal_gland_right",
+      "adrenal_gland_left",
+      "lung_upper_lobe_left",
+      "lung_lower_lobe_left",
+      "lung_middle_lobe_right",
+      "lung_lower_lobe_right",
+      "esophagus",
+      "intestine",
+      "duodenum",
+      "heart",
+      "aorta",
+      "pulmonary_vein",
+      "inferior_vena_cava",
+      "portal_vein_and_splenic_vein",
+      "iliac_artery_left",
+      "iliac_artery_right",
+      "iliac_vena_left",
+      "iliac_vena_right",
+      "scapula_left",
+      "scapula_right",
+      "hip_left",
+      "hip_right",
+      "spinal_cord",
+      "autochthon_left",
+      "autochthon_right",
+      "iliopsoas_left",
+      "iliopsoas_right",
+      "sternum",
+      "costal_cartilages",
+      "subcutaneous_fat",
+      "muscle",
+      "inner_fat",
+      "IVD",
+      "vertebra_body",
+      "vertebra_posterior_elements",
+      "spinal_channel"
+    ]
+  }
+]
