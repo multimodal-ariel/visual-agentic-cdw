@@ -194,14 +194,25 @@ class MultiToolQC:
     def _load_tool_masks(
         self, seg_dir: str
     ) -> Dict[str, Tuple[np.ndarray, tuple]]:
-        """Load all organ masks from a segmentation directory."""
+        """Load all organ masks from a segmentation directory.
+
+        Organ names are normalized to canonical form (e.g., left_kidney → kidney_left)
+        so cross-tool matching works regardless of tool-specific naming conventions.
+        """
+        from processing.format_utils import normalize_organ_name
+
+        _SKIP_STEMS = {
+            "statistics", "combined", "multilabel", "multilabel_seg",
+            "image_nifti_seg", "segmentation", "manifest",
+        }
         masks = {}
         for fname in os.listdir(seg_dir):
             if not fname.endswith(".nii.gz"):
                 continue
-            organ_name = fname.replace(".nii.gz", "")
-            if organ_name in ("statistics", "combined", "multilabel"):
+            raw_name = fname.replace(".nii.gz", "")
+            if raw_name in _SKIP_STEMS:
                 continue
+            organ_name = normalize_organ_name(raw_name)
             fpath = os.path.join(seg_dir, fname)
             try:
                 nii = nib.load(fpath)

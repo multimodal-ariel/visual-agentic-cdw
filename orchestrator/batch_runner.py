@@ -82,6 +82,7 @@ class BatchRunner:
         planner_llm=None,
         clinical_llm=None,
         llm=None,
+        consensus: bool = False,
     ):
         self.filelist = filelist
         self.gpus = gpus or [0]
@@ -91,6 +92,7 @@ class BatchRunner:
         self.skip_radiomics = skip_radiomics
         self.planner_llm = planner_llm or llm
         self.clinical_llm = clinical_llm or llm
+        self.consensus = consensus
 
         # Default paths
         os.makedirs(LOG_DIR, exist_ok=True)
@@ -210,6 +212,7 @@ class BatchRunner:
                 dry_run=self.dry_run,
                 no_llm=self.no_llm,
                 skip_radiomics=self.skip_radiomics,
+                consensus=self.consensus,
             )
 
             result = pipeline.run(case_path)
@@ -334,6 +337,7 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", action="store_true", help="Mock segmentation, real QC")
     parser.add_argument("--no-llm", action="store_true", help="Skip LLM calls, use defaults")
     parser.add_argument("--skip-radiomics", action="store_true", help="Skip radiomics extraction")
+    parser.add_argument("--consensus", action="store_true", help="Generate STAPLE consensus masks from multi-tool segmentations")
     parser.add_argument("--retry-failed", action="store_true", help="Re-process failed cases")
     args = parser.parse_args()
 
@@ -354,6 +358,7 @@ if __name__ == "__main__":
         dry_run=args.dry_run,
         no_llm=args.no_llm,
         skip_radiomics=args.skip_radiomics,
+        consensus=args.consensus,
     )
 
     summary = runner.run(retry_failed=args.retry_failed)

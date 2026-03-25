@@ -150,6 +150,10 @@ class CasePipeline:
         no_llm: If True, skip all LLM calls (use default metadata/tool selection).
         postprocess: If True, apply LCC/closing/hole-fill to masks after segmentation.
         skip_radiomics: If True, skip radiomics extraction.
+        consensus: If True, generate STAPLE consensus masks from multi-tool segmentations.
+                   Consensus masks are saved to segmentations_consensus/ and used for radiomics.
+                   Default: False (backwards-compatible — existing behavior unchanged).
+        consensus_method: "staple" (default) or "majority_vote".
     """
 
     def __init__(
@@ -162,6 +166,8 @@ class CasePipeline:
         no_llm: bool = False,
         postprocess: bool = True,
         skip_radiomics: bool = False,
+        consensus: bool = False,
+        consensus_method: str = "staple",
     ):
         # Two-model routing: planner (Qwen3-8B) + clinical (MedGemma-27B)
         # Falls back to single `llm` if specific models not provided
@@ -173,6 +179,8 @@ class CasePipeline:
         self.no_llm = no_llm if (self.planner_llm is not None or llm is not None) else True
         self.postprocess = postprocess
         self.skip_radiomics = skip_radiomics
+        self.consensus = consensus
+        self.consensus_method = consensus_method
 
         # Lazy-loaded components (avoid heavy imports at init)
         self._tool_registry = None
@@ -234,12 +242,20 @@ class CasePipeline:
             # Step 5: QC (Tier 1 + Tier 2)
             self._step_qc(case_path, seg_dirs, result)
 
+            # Step 5b: STAPLE consensus (optional, off by default)
+            if self.consensus and len(seg_dirs) >= 2:
+                self._step_consensus(case_path, seg_dirs, result)
+
             # Step 6: LLM QC interpretation (Tier 3)
             self._step_qc_interpretation(result)
 
             # Step 7: Radiomics extraction
+            # If consensus masks exist, prefer them for radiomics
+            radiomics_seg_dirs = seg_dirs
+            if self.consensus and hasattr(result, "_consensus_dir"):
+                radiomics_seg_dirs = {"consensus": result._consensus_dir, **seg_dirs}
             if not self.skip_radiomics:
-                self._step_radiomics(case_path, image_path, seg_dirs, result)
+                self._step_radiomics(case_path, image_path, radiomics_seg_dirs, result)
 
             result.status = "completed"
 
@@ -598,6 +614,48 @@ class CasePipeline:
             result.warnings.append(f"QC error: {e}")
 
         result.step_times["qc"] = round(time.time() - t0, 2)
+
+    # ── Step 5b: STAPLE consensus (optional) ────────────────────────────────
+
+    def _step_consensus(
+        self,
+        case_path: str,
+        seg_dirs: Dict[str, str],
+        result: CaseResult,
+    ) -> None:
+        """Generate STAPLE consensus masks from multi-tool segmentations."""
+        t0 = time.time()
+        try:
+            from processing.staple_consensus import generate_case_consensus
+
+            consensus_result = generate_case_consensus(
+                case_path=case_path,
+                seg_dirs=seg_dirs,
+                method=self.consensus_method,
+                min_tools=2,
+            )
+
+            result._consensus_dir = consensus_result["consensus_dir"]
+            result.qc_report["consensus"] = {
+                "organs_fused": len(consensus_result["organs_fused"]),
+                "organs_skipped": len(consensus_result["organs_skipped"]),
+                "method": self.consensus_method,
+                "time_s": consensus_result["total_time_s"],
+            }
+
+            logger.info(
+                "[%s] Consensus: %d organs fused via %s (%.1fs)",
+                result.case_id,
+                len(consensus_result["organs_fused"]),
+                self.consensus_method,
+                consensus_result["total_time_s"],
+            )
+
+        except Exception as e:
+            logger.error("[%s] Consensus generation failed: %s", result.case_id, e)
+            result.warnings.append(f"Consensus error: {e}")
+
+        result.step_times["consensus"] = round(time.time() - t0, 2)
 
     # ── Step 6: LLM QC interpretation (Tier 3) ─────────────────────────────
 

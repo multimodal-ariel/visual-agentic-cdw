@@ -14,10 +14,115 @@ Scope: 3D volumes only.
 """
 
 import os
+import re
 from typing import Dict, List, Optional, Tuple
 
 import nibabel as nib
 import numpy as np
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Organ Name Normalization
+# ──────────────────────────────────────────────────────────────────────────────
+# Tools use inconsistent naming for the same organ:
+#   VISTA3D:    left_kidney, left_adrenal_gland, left_lung_lower_lobe
+#   TotalSeg:   kidney_left, adrenal_gland_left, lung_lower_lobe_left
+#   VIBESeg:    intestine (vs small_bowel), IVD (vs intervertebral_discs)
+#
+# Canonical form: {structure}_{side} (TotalSegmentator convention).
+# All names lowercased, underscores for spaces/hyphens.
+
+# Exact synonym mapping (applied after lowercase + directional swap)
+_ORGAN_SYNONYMS: Dict[str, str] = {
+    "intestine": "small_bowel",
+    "ivd": "intervertebral_discs",
+    "bladder": "urinary_bladder",
+    "spinal_channel": "spinal_canal",
+    "vertebra_body": "vertebrae_body",
+    "vertebra_posterior_elements": "vertebrae_posterior_elements",
+}
+
+# Regex: match VISTA3D-style "left_<organ>" or "right_<organ>" prefixes
+_DIRECTIONAL_PREFIX_RE = re.compile(
+    r"^(left|right)_rib_(\d+)$"   # Special case: left_rib_10 → rib_left_10
+)
+_DIRECTIONAL_GENERIC_RE = re.compile(
+    r"^(left|right)_(.+)$"        # Generic: left_kidney → kidney_left
+)
+
+
+def normalize_organ_name(name: str) -> str:
+    """
+    Normalize an organ name to canonical form.
+
+    Canonical conventions (matching TotalSegmentator / majority of tools):
+      - All lowercase
+      - Underscores for separators (no spaces, no hyphens)
+      - Laterality as suffix: kidney_left, adrenal_gland_right
+      - Known synonyms resolved: intestine → small_bowel, IVD → intervertebral_discs
+
+    Examples:
+        >>> normalize_organ_name("left_kidney")
+        'kidney_left'
+        >>> normalize_organ_name("Left_Adrenal_Gland")
+        'adrenal_gland_left'
+        >>> normalize_organ_name("left_rib_10")
+        'rib_left_10'
+        >>> normalize_organ_name("IVD")
+        'intervertebral_discs'
+        >>> normalize_organ_name("intestine")
+        'small_bowel'
+        >>> normalize_organ_name("kidney_left")  # already canonical
+        'kidney_left'
+    """
+    # Step 1: lowercase, normalize separators
+    name = name.lower().strip().replace(" ", "_").replace("-", "_")
+
+    # Step 2: directional prefix → suffix (VISTA3D convention → TotalSeg convention)
+    # Special case for ribs: left_rib_10 → rib_left_10 (not rib_10_left)
+    m = _DIRECTIONAL_PREFIX_RE.match(name)
+    if m:
+        side, num = m.group(1), m.group(2)
+        name = f"rib_{side}_{num}"
+    else:
+        m = _DIRECTIONAL_GENERIC_RE.match(name)
+        if m:
+            side, rest = m.group(1), m.group(2)
+            name = f"{rest}_{side}"
+
+    # Step 3: exact synonyms
+    name = _ORGAN_SYNONYMS.get(name, name)
+
+    return name
+
+
+def build_normalized_mask_index(
+    seg_dir: str,
+) -> Dict[str, str]:
+    """
+    Build a mapping of canonical_organ_name → file_path for all masks in a seg_dir.
+
+    Skips non-organ files (manifest.json, statistics.json, multilabel_seg, image_nifti_seg).
+
+    Returns:
+        Dict mapping normalized organ name to the absolute path of the .nii.gz file.
+    """
+    _SKIP_STEMS = {
+        "manifest", "statistics", "multilabel_seg", "image_nifti_seg",
+        "combined", "segmentation", "multilabel",
+    }
+    index: Dict[str, str] = {}
+    if not os.path.isdir(seg_dir):
+        return index
+    for fname in os.listdir(seg_dir):
+        if not fname.endswith(".nii.gz"):
+            continue
+        stem = fname.replace(".nii.gz", "")
+        if stem in _SKIP_STEMS:
+            continue
+        canonical = normalize_organ_name(stem)
+        index[canonical] = os.path.join(seg_dir, fname)
+    return index
 
 
 def load_reference(

@@ -5,9 +5,15 @@ from scipy.ndimage import binary_closing, generate_binary_structure
 from scipy.ndimage import binary_opening
 from scipy.spatial import ConvexHull
 from scipy.ndimage import iterate_structure
-import itk
 import warnings
-from skimage.morphology import convex_hull_image
+try:
+    import itk
+except ImportError:
+    itk = None  # STAPLE fusion falls back to probabilistic mean
+try:
+    from skimage.morphology import convex_hull_image
+except ImportError:
+    convex_hull_image = None
 from scipy.ndimage import gaussian_filter
 
 
@@ -110,35 +116,48 @@ def threshold_probabilities(prob_map: np.ndarray, threshold: float = 0.5) -> np.
 
 
 def staple_fusion(masks: list) -> np.ndarray:
-    """STAPLE consensus from multiple binary masks."""
+    """
+    STAPLE consensus from multiple binary masks.
+
+    Tries backends in order: SimpleITK (preferred, already in cdw_radiomics),
+    ITK (heavier), probabilistic mean (pure numpy fallback).
+    """
     if len(masks) == 0:
         raise ValueError("At least one mask is required for STAPLE fusion")
     if len(masks) == 1:
         return masks[0].astype(np.uint8)
 
-    stacked = np.stack(masks, axis=0)
+    # Try SimpleITK first (lighter, already installed in cdw_radiomics)
+    # STAPLE requires uint16 input for 3D volumes (float32 not supported in 3D)
     try:
-        staple_cls = None
-        for candidate in ("STAPLEImageFilter", "staple_image_filter"):
-            if hasattr(itk, candidate):
-                staple_cls = getattr(itk, candidate)
-                break
-        if staple_cls is None:
-            raise AttributeError("No STAPLE filter class found in itk")
+        import SimpleITK as sitk
+        sitk_masks = [sitk.GetImageFromArray(m.astype(np.uint16)) for m in masks]
+        result = sitk.STAPLE(sitk_masks)
+        return (sitk.GetArrayFromImage(result) > 0.5).astype(np.uint8)
+    except Exception:
+        pass
 
-        staple_filter = staple_cls.New()
-        for idx, mask in enumerate(stacked):
-            itk_mask = itk.GetImageFromArray(mask.astype(np.float32))
-            staple_filter.SetInput(idx, itk_mask)
-        staple_filter.Update()
-        result = staple_filter.GetOutput()
-        return (itk.GetArrayFromImage(result) > 0.5).astype(np.uint8)
-    except Exception as exc:
-        warnings.warn(
-            f"Failed to run ITK STAPLE filter ({exc}); falling back to probabilistic mean",
-            stacklevel=2,
-        )
-        return (stacked.mean(axis=0) > 0.5).astype(np.uint8)
+    # Try ITK (heavier but more configurable)
+    try:
+        if itk is not None:
+            itk_masks = [itk.GetImageFromArray(m.astype(np.float32)) for m in masks]
+            ImageType = type(itk_masks[0])
+            staple_filter = itk.STAPLEImageFilter[ImageType, ImageType].New()
+            for idx, itk_mask in enumerate(itk_masks):
+                staple_filter.SetInput(idx, itk_mask)
+            staple_filter.Update()
+            result = staple_filter.GetOutput()
+            return (itk.GetArrayFromImage(result) > 0.5).astype(np.uint8)
+    except Exception:
+        pass
+
+    # Fallback: probabilistic mean (equivalent to majority vote for binary)
+    warnings.warn(
+        "Neither SimpleITK nor ITK STAPLE available; using probabilistic mean",
+        stacklevel=2,
+    )
+    stacked = np.stack(masks, axis=0)
+    return (stacked.mean(axis=0) > 0.5).astype(np.uint8)
 
 
 def majority_vote(masks: list) -> np.ndarray:

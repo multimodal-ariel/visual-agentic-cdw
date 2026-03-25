@@ -96,7 +96,8 @@ agentic_cdw/
 ├── processing/
 │   ├── preprocessing.py            # NIfTI loading, orientation, resampling
 │   ├── postprocessing.py           # LCC, closing, hole fill, mask merging, STAPLE fusion
-│   └── format_utils.py             # save_organ_mask(), split_multilabel_nifti() — canonical output format
+│   ├── staple_consensus.py         # Multi-tool STAPLE consensus generation (standalone + pipeline)
+│   └── format_utils.py             # save_organ_mask(), split_multilabel_nifti(), normalize_organ_name()
 ├── orchestrator/                   # End-to-end pipeline execution
 │   ├── pipeline.py                # CasePipeline — single-case flow (metadata → seg → QC → radiomics)
 │   ├── batch_runner.py            # BatchRunner — parallel batch with GPU pool, CSV output, CLI
@@ -284,10 +285,11 @@ Per-tool, per-organ checks ported from `scripts/qc_segs_old.py` and generalized 
 
 ### Tier 2: Multi-Tool Agreement (`MultiToolQC`)
 Cross-tool pairwise checks when ≥2 tools segment the same case:
+- **Organ name normalization** — tool-specific names canonicalized before matching (e.g., VISTA3D `left_kidney` → `kidney_left`, VIBESeg `intestine` → `small_bowel`) via `normalize_organ_name()`
 - **Dice coefficient** — flags organs where tools disagree (threshold: 0.70)
 - **Volume divergence** — flags >50% volume difference between tools
 - **Presence mismatch** — one tool found the organ, the other didn't
-- **Consensus generation** — STAPLE or majority-vote fusion via `processing/postprocessing.py`
+- **Consensus generation** — STAPLE (SimpleITK) or majority-vote fusion via `processing/staple_consensus.py`, enabled with `--consensus` flag
 
 ### Tier 3: LLM Interpretation (`QCInterpreter`)
 Plugs Tier 1 flags into validated LLM prompts for clinical assessment:
@@ -378,10 +380,10 @@ Pipeline flow per case:
 ### Batch runner (`BatchRunner`)
 
 ```bash
-# CLI: 5,376 CT cases on 2 GPUs, 2 parallel workers
+# CLI: 5,376 CT cases on 8 GPUs, 8 parallel workers
 python -m orchestrator.batch_runner \
     --filelist /data/soumitri/new_data_paths/ct_axial_cases.json \
-    --gpus 0,1 --workers 2 --no-llm
+    --gpus 0,1,2,3,4,5,6,7 --workers 8 --no-llm
 
 # Dry-run validation on dummy data
 python -m orchestrator.batch_runner \
@@ -389,7 +391,7 @@ python -m orchestrator.batch_runner \
 
 # Resume after crash (auto-skips completed cases)
 python -m orchestrator.batch_runner \
-    --filelist /data/.../ct_axial_cases.json --gpus 0,1 --workers 2
+    --filelist /data/.../ct_axial_cases.json --gpus 0,1,2,3,4,5,6,7 --workers 8
 
 # Re-process failed cases
 python -m orchestrator.batch_runner \
@@ -397,7 +399,7 @@ python -m orchestrator.batch_runner \
 ```
 
 Key features:
-- **GPU pool**: explicit `--gpus 0,1` allocation prevents two tools from fighting for the same GPU
+- **GPU pool**: explicit `--gpus 0,1,2,3,4,5,6,7` allocation prevents two tools from fighting for the same GPU — supports any number of GPUs, workers capped by GPU count
 - **Resume**: JSON state file (`logs/pipeline_state.json`) tracks every case as pending/running/completed/failed — on restart, completed cases are skipped automatically
 - **Aggregate CSV**: `logs/pipeline_results.csv` — one row per case with modality, tools, QC severity, radiomics count, timing
 - **Per-case audit log**: `logs/cases/{case_id}_log.json` — metadata, tools, QC, radiomics decisions, timing, errors
@@ -588,8 +590,8 @@ This section documents where the actual implementation differs from the original
 
 1. **Radiomics uses first available seg_dir only** — if the first tool's masks are incomplete, organs from other tools are missed. Silent degradation with no warning.
 2. **No validation of image/mask spatial alignment** — PyRadiomics assumes image and mask are in the same space. Misaligned inputs will error.
-3. **Organ name conflicts across tools** — tools use different naming (e.g., `kidney_right` vs `right kidney`). No canonical normalization layer exists yet.
-4. **STAPLE consensus generation implemented but not called** — `MultiToolQC.generate_consensus()` exists but the pipeline never invokes it. It's available for manual post-hoc analysis.
+3. ~~Organ name conflicts across tools~~ — **RESOLVED**: `normalize_organ_name()` in `processing/format_utils.py` canonicalizes tool-specific names (e.g., VISTA3D `left_kidney` → `kidney_left`, VIBESeg `intestine` → `small_bowel`). Applied in `MultiToolQC` mask loading and STAPLE consensus generation.
+4. ~~STAPLE consensus not called~~ — **RESOLVED**: `--consensus` flag in batch_runner enables STAPLE consensus generation after Tier 2 QC. Consensus masks saved to `segmentations_consensus/` and preferred for radiomics when enabled. Uses SimpleITK STAPLE backend.
 
 ## Future Work
 
@@ -608,12 +610,9 @@ Geometric QC volume plausibility and paired ratio checks are disabled for MRI (`
 - Add `volume_range_mri_ml` fields to `organ_reference.json` alongside the existing CT ranges
 - Update `GeometricQC` to select the appropriate range by modality
 
-**3. Organ name canonicalization** (priority: medium)
+**3. ~~Organ name canonicalization~~** — **DONE** (2026-03-25)
 
-Tools use inconsistent naming (e.g., `kidney_right` vs `right kidney` vs `kidney_R`). Currently there is no normalization layer — cross-tool QC and radiomics aggregation rely on exact name matches. Future fix:
-- Build a canonical organ name mapping (tool-specific name → canonical name)
-- Apply at mask discovery time in `format_utils.py`
-- Enables reliable cross-tool Dice/STAPLE for all organs, not just those with coincidentally matching names
+Implemented `normalize_organ_name()` in `processing/format_utils.py`. Handles VISTA3D directional prefix swap (`left_kidney` → `kidney_left`), VIBESeg synonyms (`intestine` → `small_bowel`, `IVD` → `intervertebral_discs`), and case normalization. Applied in `MultiToolQC._load_tool_masks()` and `staple_consensus.py`. Result: 81 shared organs between TotalSeg CT and VISTA3D (up from ~50 without normalization).
 
 **4. Multi-tool radiomics aggregation** (priority: high)
 
@@ -621,12 +620,9 @@ Currently `pipeline.py` extracts radiomics from the first available `seg_dir` on
 - Iterate over all tool seg_dirs, collecting the best mask per organ (e.g., QC-passing mask with highest LCC fraction)
 - Or use STAPLE consensus masks (see item 5) as the radiomics input
 
-**5. STAPLE consensus in production pipeline** (priority: medium)
+**5. ~~STAPLE consensus in production pipeline~~** — **DONE** (2026-03-25)
 
-`MultiToolQC.generate_consensus()` is implemented but never called from `CasePipeline`. Integrating it would:
-- Produce a single fused mask per organ from multi-tool agreement
-- Provide a higher-quality input for radiomics than any single tool
-- Requires organ name canonicalization (item 3) to work across tools
+Implemented `processing/staple_consensus.py` with `generate_case_consensus()`. Pipeline integration via `--consensus` flag (opt-in, default off). Uses SimpleITK STAPLE backend (uint16 input for 3D), falls back to ITK then probabilistic mean. Validated on CT case 0004 (68 organs fused from 5 tools, key organs get 5-tool consensus). ~3-4s per organ with 2 tools.
 
 **6. Feature-tier gating enforcement** (priority: low)
 
@@ -700,3 +696,7 @@ Deferred due to detectron2 CUDA build incompatibility with Blackwell/Ada Lovelac
 | 2026-03-24 | Deployment documentation overhaul: `docs/deployment.md` and `docs/installation.md` rewritten for 8×L40S target with pre-flight checks, conda path detection, and missing env fixes |
 | 2026-03-24 | TotalSegmentator MR validated: 2 MR (001, 002), 50/50 organs both cases, 6/6 key organs, shape/affine match, ~13s/case |
 | 2026-03-24 | Added "Future Work" section to PIPELINE.md: 8 items including LLM-guided tool reduction, MRI QC ranges, organ canonicalization, multi-tool radiomics |
+| 2026-03-25 | Organ name normalization: `normalize_organ_name()` in `processing/format_utils.py` — VISTA3D directional swap, VIBESeg synonyms, case normalization. Applied in MultiToolQC + STAPLE consensus. 33/33 tests, 81 cross-tool shared organs (TotalSeg CT ∩ VISTA3D) |
+| 2026-03-25 | STAPLE consensus: `processing/staple_consensus.py` — SimpleITK STAPLE backend for multi-tool fusion. Validated on CT case 0004 (68 organs fused from 5 tools, liver=158k voxels/3s). Pipeline integration via `--consensus` flag (opt-in, backwards-compatible) |
+| 2026-03-25 | `postprocessing.py`: fixed top-level `import itk` crash → lazy import with SimpleITK/ITK/numpy fallback chain for STAPLE |
+| 2026-03-25 | GPU examples updated to 8×L40S: `--gpus 0,1,2,3,4,5,6,7 --workers 8` throughout PIPELINE.md |
