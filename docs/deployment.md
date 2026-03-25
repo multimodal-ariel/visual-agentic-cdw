@@ -44,13 +44,8 @@ source ~/.bashrc
 The pipeline depends on 11+ patched third-party repos as git submodules under `external/`. You **must** use recursive clone to get the exact pinned versions.
 
 ```bash
-git clone --recurse-submodules <repo_url> agentic-cdw
+git clone https://github.com/multimodal-ariel/visual-agentic-cdw.git agentic-cdw
 cd agentic-cdw
-```
-
-If you already cloned without `--recurse-submodules`:
-```bash
-git submodule update --init --recursive
 ```
 
 **Verify submodules populated** (this MUST pass before proceeding):
