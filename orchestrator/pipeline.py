@@ -171,16 +171,21 @@ class CasePipeline:
     ):
         # Two-model routing: planner (Qwen3-8B) + clinical (MedGemma-27B)
         # Falls back to single `llm` if specific models not provided
-        self.planner_llm = planner_llm or llm
-        self.clinical_llm = clinical_llm or llm
+        self.planner_llm = planner_llm 
+        self.clinical_llm = clinical_llm
         self.llm = llm  # legacy compat
         self.device = device
         self.dry_run = dry_run
-        self.no_llm = no_llm if (self.planner_llm is not None or llm is not None) else True
+        self.no_llm = no_llm
         self.postprocess = postprocess
         self.skip_radiomics = skip_radiomics
         self.consensus = consensus
         self.consensus_method = consensus_method
+
+        if not self.no_llm and self.planner_llm is None:
+            logger.warning("CasePipeline no_llm=False but planner_llm is None.")
+        if not self.no_llm and self.clinical_llm is None:
+            logger.warning("CasePipeline no_llm=False but clinical_llm is None; QC interpretation will fallback.")
 
         # Lazy-loaded components (avoid heavy imports at init)
         self._tool_registry = None

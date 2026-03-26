@@ -88,11 +88,17 @@ class BatchRunner:
         self.gpus = gpus or [0]
         self.workers = min(workers, len(self.gpus))
         self.dry_run = dry_run
-        self.no_llm = no_llm if (planner_llm is not None or llm is not None) else True
+        self.no_llm = no_llm 
         self.skip_radiomics = skip_radiomics
-        self.planner_llm = planner_llm or llm
-        self.clinical_llm = clinical_llm or llm
+        self.planner_llm = planner_llm
+        self.clinical_llm = clinical_llm
         self.consensus = consensus
+        self.llm = llm
+
+        if not self.no_llm and self.planner_llm is None:
+            logger.warning("LLM enabled but planner_llm is None; metadata/tool-selection will fall back unless provided.")
+        if not self.no_llm and self.clinical_llm is None:
+            logger.warning("LLM enabled but clinical_llm is None; QC interpretation will use fallback.")
 
         # Default paths
         os.makedirs(LOG_DIR, exist_ok=True)
