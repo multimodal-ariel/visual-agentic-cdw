@@ -48,6 +48,7 @@ import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from datetime import datetime
 
 from config.constants import (
     IMAGE_FILENAME,
@@ -164,7 +165,7 @@ class CasePipeline:
         device: str = "gpu:0",
         dry_run: bool = False,
         no_llm: bool = False,
-        postprocess: bool = True,
+        postprocess: bool = False,
         skip_radiomics: bool = False,
         consensus: bool = False,
         consensus_method: str = "staple",

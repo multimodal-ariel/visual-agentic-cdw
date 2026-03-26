@@ -83,7 +83,7 @@ DEFAULT_TOOL_COLOR = "#8c564b"
 
 # Tools that are invalid for a given modality — filter these out
 TOOL_MODALITY_EXCLUDE = {
-    "CT":  {"totalseg_mr", "mrseg"},       # MR-only tools don't belong in CT
+    "CT":  {"totalseg_mr"},                 # MR-only tools don't belong in CT
     "MRI": {"totalseg_ct"},                 # CT-only tool doesn't belong in MRI
 }
 
@@ -468,6 +468,200 @@ def plot_volume_violin(df: pd.DataFrame, output_dir: str):
     )
 
 
+def plot_ct_subset(df: pd.DataFrame, output_dir: str):
+    """
+    Focused plot: CT only, left kidney + liver + spleen,
+    tools = mrseg, totalseg_ct, voxtell, vista3d.
+    Two rows: volume (top) and intensity (bottom), 3 organ columns.
+    Saved as 600 dpi PNG.
+    """
+    SUBSET_ORGANS = ["kidney_left", "liver", "spleen"]
+    SUBSET_TOOLS = ["mrseg", "totalseg_ct", "voxtell", "vista3d"]
+
+    df_ct = df[(df["modality"] == "CT") & (df["tool"] != "consensus")].copy()
+    df_ct = df_ct[df_ct["organ"].isin(SUBSET_ORGANS)]
+    df_ct = df_ct[df_ct["tool"].isin(SUBSET_TOOLS)]
+
+    if df_ct.empty:
+        print("  SKIP (CT subset): No matching data")
+        return
+
+    # Ensure consistent tool order
+    tools_present = [t for t in SUBSET_TOOLS if t in df_ct["tool"].unique()]
+    has_intensity = df_ct["mean_intensity"].notna().any()
+    n_rows = 2 if has_intensity else 1
+    n_cols = len(SUBSET_ORGANS)
+
+    fig, axes = plt.subplots(n_rows, n_cols,
+                             figsize=(4.5 * n_cols, 5 * n_rows),
+                             squeeze=False)
+
+    # Row 0: Volume
+    for col, organ in enumerate(SUBSET_ORGANS):
+        ax = axes[0, col]
+        df_cell = df_ct[df_ct["organ"] == organ]
+        if df_cell.empty:
+            ax.text(0.5, 0.5, "no data", ha="center", va="center",
+                    transform=ax.transAxes, fontsize=10, color="#999")
+            ax.set_xticks([])
+        else:
+            _draw_box_strip_on_ax(ax, df_cell, tools_present, "volume_ml")
+        ax.set_title(ORGAN_DISPLAY.get(organ, organ), fontsize=13, fontweight="bold")
+        if col == 0:
+            ax.set_ylabel("Volume (mL)", fontsize=11)
+        else:
+            ax.set_ylabel("")
+        ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
+
+    # Row 1: Intensity
+    if has_intensity:
+        for col, organ in enumerate(SUBSET_ORGANS):
+            ax = axes[1, col]
+            df_cell = df_ct[df_ct["organ"] == organ].dropna(subset=["mean_intensity"])
+            if df_cell.empty:
+                ax.text(0.5, 0.5, "no data", ha="center", va="center",
+                        transform=ax.transAxes, fontsize=10, color="#999")
+                ax.set_xticks([])
+            else:
+                _draw_box_strip_on_ax(ax, df_cell, tools_present, "mean_intensity")
+            if col == 0:
+                ax.set_ylabel("Mean Intensity (HU)", fontsize=11)
+            else:
+                ax.set_ylabel("")
+            ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
+
+    # Shared legend
+    legend_handles = [
+        plt.Line2D([0], [0], marker="o", color="w",
+                    markerfacecolor=TOOL_COLORS.get(t, DEFAULT_TOOL_COLOR),
+                    markersize=8, label=t)
+        for t in tools_present
+    ]
+    fig.legend(handles=legend_handles, loc="lower center",
+               ncol=len(tools_present), frameon=False, fontsize=10,
+               title="Segmentation Tool", title_fontsize=11,
+               bbox_to_anchor=(0.5, -0.02))
+
+    fig.suptitle("CT — Left Kidney, Liver, Spleen: Volume & Intensity",
+                 fontsize=15, fontweight="bold", y=1.01)
+    fig.tight_layout()
+
+    path = os.path.join(output_dir, "seg_ct_subset.png")
+    fig.savefig(path, dpi=600)
+    plt.close(fig)
+    print(f"  Saved: {path} (600 dpi)")
+
+
+# Organ colors for scatter plot
+ORGAN_COLORS = {
+    "kidney_left":  "#1f77b4",
+    "kidney_right": "#aec7e8",
+    "liver":        "#ff7f0e",
+    "pancreas":     "#2ca02c",
+    "gallbladder":  "#d62728",
+    "spleen":       "#9467bd",
+}
+
+# Tool marker shapes for scatter plot
+TOOL_MARKERS = {
+    "vista3d":     "o",
+    "totalseg_ct": "s",
+    "totalseg_mr": "D",
+    "mrseg":       "^",
+    "voxtell":     "v",
+    "consensus":   "P",
+}
+DEFAULT_MARKER = "X"
+
+
+def plot_volume_intensity_scatter(df: pd.DataFrame, output_dir: str):
+    """
+    Scatter plot: volume (x) vs mean intensity (y), colored by organ,
+    marker shape by tool. One panel per modality (CT, MRI side by side).
+    """
+    df_sc = df[df["tool"] != "consensus"].dropna(subset=["mean_intensity"]).copy()
+    if df_sc.empty:
+        print("  SKIP (scatter): No intensity data available")
+        return
+
+    modalities = sorted(df_sc["modality"].unique())
+    modalities = [m for m in modalities if m != "UNKNOWN"]
+    if not modalities:
+        print("  SKIP (scatter): No CT/MRI data")
+        return
+
+    organs = [o for o in PRIMARY_ORGANS if o in df_sc["organ"].unique()]
+    tools = sorted(df_sc["tool"].unique())
+
+    fig, axes = plt.subplots(1, len(modalities),
+                             figsize=(8 * len(modalities), 7),
+                             squeeze=False)
+
+    for col, modality in enumerate(modalities):
+        ax = axes[0, col]
+        df_mod = df_sc[df_sc["modality"] == modality]
+
+        if df_mod.empty:
+            ax.set_title(f"{modality} (no data)")
+            continue
+
+        # Plot each organ × tool combination
+        for organ in organs:
+            color = ORGAN_COLORS.get(organ, "#999999")
+            for tool in tools:
+                df_ot = df_mod[(df_mod["organ"] == organ) & (df_mod["tool"] == tool)]
+                if df_ot.empty:
+                    continue
+                marker = TOOL_MARKERS.get(tool, DEFAULT_MARKER)
+                ax.scatter(
+                    df_ot["volume_ml"].values,
+                    df_ot["mean_intensity"].values,
+                    c=color, marker=marker, s=40, alpha=0.75,
+                    edgecolors="white", linewidths=0.4, zorder=3,
+                )
+
+        ax.set_xlabel("Volume (mL)", fontsize=12)
+        ax.set_ylabel("Mean Intensity (HU / a.u.)", fontsize=12)
+        ax.set_title(f"{modality} — Volume vs Intensity", fontsize=14, fontweight="bold")
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:,.0f}"))
+
+    # Build two legends: one for organ (color), one for tool (marker)
+    organ_handles = [
+        plt.Line2D([0], [0], marker="o", color="w", markersize=8,
+                    markerfacecolor=ORGAN_COLORS.get(o, "#999"),
+                    label=ORGAN_DISPLAY.get(o, o))
+        for o in organs
+    ]
+    tool_handles = [
+        plt.Line2D([0], [0], marker=TOOL_MARKERS.get(t, DEFAULT_MARKER),
+                    color="w", markersize=8, markerfacecolor="#555",
+                    markeredgecolor="#555", label=t)
+        for t in tools
+    ]
+
+    leg1 = fig.legend(handles=organ_handles, loc="lower left",
+                      ncol=len(organs), frameon=False, fontsize=9,
+                      title="Organ (color)", title_fontsize=10,
+                      bbox_to_anchor=(0.02, -0.04))
+    fig.legend(handles=tool_handles, loc="lower right",
+               ncol=len(tools), frameon=False, fontsize=9,
+               title="Tool (shape)", title_fontsize=10,
+               bbox_to_anchor=(0.98, -0.04))
+    fig.add_artist(leg1)
+
+    fig.suptitle("Organ Feature Space: Volume vs Mean Intensity",
+                 fontsize=15, fontweight="bold", y=1.01)
+    fig.tight_layout()
+
+    path = os.path.join(output_dir, "seg_volume_vs_intensity.png")
+    fig.savefig(path, dpi=600)
+    fig.savefig(os.path.join(output_dir, "seg_volume_vs_intensity.pdf"))
+    plt.close(fig)
+    print(f"  Saved: {path} (600 dpi)")
+
+
 def save_feature_csv(df: pd.DataFrame, output_dir: str):
     """Save the raw feature table for further analysis."""
     path = os.path.join(output_dir, "seg_organ_features.csv")
@@ -541,6 +735,8 @@ def main():
     plot_volume_distributions(df, output_dir)
     plot_intensity_distributions(df, output_dir)
     plot_volume_violin(df, output_dir)
+    plot_ct_subset(df, output_dir)
+    plot_volume_intensity_scatter(df, output_dir)
     print_outlier_summary(df)
 
     print(f"\nAll outputs saved to: {output_dir}")
