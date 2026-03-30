@@ -32,7 +32,7 @@ FILELIST_ALL = "/data/soumitri/new_data_paths/3d_scans_list.json"
 FILELIST_CT_AXIAL = "/data/soumitri/new_data_paths/ct_axial_cases.json"
 
 # Testing the pipeline on a small subset of random images
-FILELIST_TESTING = "/data/soumitri/test_pipeline_outputs/filelist_testing_remapped.json"
+FILELIST_TESTING = "/data/soumitri/test_pipeline_demo/filelist.json"
 
 # Cases needing NIfTI reconversion
 FILELIST_RECONVERT = "/data/soumitri/new_data_paths/reconvert_cases.json"
