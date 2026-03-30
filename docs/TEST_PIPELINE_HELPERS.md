@@ -146,21 +146,19 @@ Runs the entire pipeline for one case with mock segmentation outputs and rule-ba
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1,2,3,4,5,6,7'
 
-CASE = '/data/soumitri/test_pipeline_2/data_soumitri_segmentations_3d_LUPUS_87B83317A40322D15E6BD16FDF2B126B_20241007_CT_ABDOMEN_PELVIS_WO_CONTRAST_Abdomen_Pelvis_3mm_Axial_ST_iMAR'
+CASE = '/data/soumitri/test_pipeline_2/data_soumitri_segmentations_3d_LUPUS_95311B75A83D012FC825223C25CDFFD4_20210818_CT_ABDOMEN_PELVIS_WO_CONTRAST_Coronal'
 
 from planner import PlannerLLM
 planner_llm = PlannerLLM.from_local('checkpoints/qwen3-8b')
 planner_llm.load()
-clinical_llm = PlannerLLM.from_local('checkpoints/medgemma-27b-text-it')
-clinical_llm.load()
+clinical_llm = None
 
 from orchestrator.pipeline import CasePipeline
-pipeline = CasePipeline(planner_llm=planner_llm, clinical_llm=clinical_llm, skip_radiomics=False)
+pipeline = CasePipeline(planner_llm=planner_llm, clinical_llm=clinical_llm, skip_radiomics=True)
 result = pipeline.run(CASE)  # ← CHANGE THIS
 print(f'Tools run: {result.selected_tools}')
 print(f'Tool outputs: {[t[\"tool_name\"] for t in result.tool_outputs]}')
 print(f'Status: {result.status}')
-print(f'QC severity: {result.qc_report.get(\"overall_severity\", \"N/A\")}')
 print(f'Time: {result.total_time_s}s')
 "
 ```

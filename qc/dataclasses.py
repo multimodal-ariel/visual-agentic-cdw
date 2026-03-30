@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-
+import numpy as np
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Tier 1: Per-organ geometric QC result
@@ -102,10 +102,20 @@ class OrganAgreement:
     organ: str
     tool_a: str
     tool_b: str
+
+    # Descriptive overlap
     dice: float = 0.0
+
+    # Volumes
     volume_a_ml: float = 0.0
     volume_b_ml: float = 0.0
-    agrees: bool = True  # True if Dice >= threshold
+
+    # New Tier-2 spatial consistency metrics
+    bbox_overlap: float = 0.0
+    centroid_distance_mm: float = 0.0
+
+    # Verdict
+    agrees: bool = True
     flag: str = ""
 
 
@@ -115,11 +125,25 @@ class MultiToolQCResult:
 
     case_id: str
     case_path: str
+
+    # Pairwise stats
     tool_pairs_checked: int = 0
     organs_with_agreement: int = 0
     organs_with_disagreement: int = 0
+
     mean_dice: float = 0.0
-    agreements: list[OrganAgreement] = field(default_factory=list)
+    mean_bbox_overlap: float = 0.0
+    mean_centroid_distance_mm: float = 0.0
+
+    agreements: List[OrganAgreement] = field(default_factory=list)
+
+    # Organ-level fusion outputs after outlier filtering
+    fused_soft_by_organ: Dict[str, np.ndarray] = field(default_factory=dict)
+    fused_binary_by_organ: Dict[str, np.ndarray] = field(default_factory=dict)
+
+    # Audit trail
+    kept_tools_by_organ: Dict[str, List[str]] = field(default_factory=dict)
+    rejected_tools_by_organ: Dict[str, List[str]] = field(default_factory=dict)
 
 
 # ──────────────────────────────────────────────────────────────────────────────

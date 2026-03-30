@@ -31,6 +31,7 @@ Raw mask
   └── Output: cleaned mask → QC → radiomics
 '''
 
+# currently, these are the only postprocessing functions being used
 
 def keep_largest_component(mask: np.ndarray) -> np.ndarray:
     labeled, num_features = label(mask)
@@ -40,6 +41,11 @@ def keep_largest_component(mask: np.ndarray) -> np.ndarray:
     largest = sizes.argmax() + 1
     return (labeled == largest).astype(mask.dtype)
 
+def fill_holes(mask: np.ndarray) -> np.ndarray:
+    return binary_fill_holes(mask).astype(mask.dtype)
+
+
+# currently the remaining are not used, but can be plugged in for specific cases
 
 def remove_small_components(mask: np.ndarray, min_volume_voxels: int = 100) -> np.ndarray:
     labeled, num_features = label(mask)
@@ -49,10 +55,6 @@ def remove_small_components(mask: np.ndarray, min_volume_voxels: int = 100) -> n
     for sl in small_labels:
         mask_clean[labeled == sl] = 0
     return mask_clean
-
-
-def fill_holes(mask: np.ndarray) -> np.ndarray:
-    return binary_fill_holes(mask).astype(mask.dtype)
 
 
 def morphological_close(mask: np.ndarray, radius: int = 2) -> np.ndarray:

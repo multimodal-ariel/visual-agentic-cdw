@@ -361,8 +361,8 @@ if __name__ == "__main__":
         from planner import PlannerLLM
         planner_llm = PlannerLLM.from_local("checkpoints/qwen3-8b")
         planner_llm.load()
-        clinical_llm = PlannerLLM.from_local("checkpoints/medgemma-27b-text-it")
-        clinical_llm.load()
+        # clinical_llm = PlannerLLM.from_local("checkpoints/medgemma-27b-text-it")
+        # clinical_llm.load()
 
     runner = BatchRunner(
         filelist=args.filelist,

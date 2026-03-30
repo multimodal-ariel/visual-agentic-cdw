@@ -56,8 +56,14 @@ from config.constants import (
     TOOL_OUTPUT_DIRS,
 )
 from tools.base_tool import BaseSegmentationTool, ToolInput, ToolOutput
+from processing.postprocessing import keep_largest_component, fill_holes
 
 logger = logging.getLogger(__name__)
+
+import shutil
+import nibabel as nib
+import numpy as np
+from scipy.ndimage import distance_transform_edt
 
 # Module-level cache for extract_pyradiomics to survive sys.modules swap
 _EXTRACT_PYRADIOMICS = None
@@ -154,7 +160,6 @@ class CasePipeline:
         consensus: If True, generate STAPLE consensus masks from multi-tool segmentations.
                    Consensus masks are saved to segmentations_consensus/ and used for radiomics.
                    Default: False (backwards-compatible — existing behavior unchanged).
-        consensus_method: "staple" (default) or "majority_vote".
     """
 
     def __init__(
@@ -165,10 +170,9 @@ class CasePipeline:
         device: str = "gpu:0",
         dry_run: bool = False,
         no_llm: bool = False,
-        postprocess: bool = False,
+        postprocess: bool = True,
         skip_radiomics: bool = False,
-        consensus: bool = False,
-        consensus_method: str = "staple",
+        consensus: bool = True,
     ):
         # Two-model routing: planner (Qwen3-8B) + clinical (MedGemma-27B)
         # Falls back to single `llm` if specific models not provided
@@ -181,7 +185,6 @@ class CasePipeline:
         self.postprocess = postprocess
         self.skip_radiomics = skip_radiomics
         self.consensus = consensus
-        self.consensus_method = consensus_method
 
         if not self.no_llm and self.planner_llm is None:
             logger.warning("CasePipeline no_llm=False but planner_llm is None.")
@@ -237,23 +240,29 @@ class CasePipeline:
             # Step 2: Tool selection
             result.selected_tools = self._step_tool_selection(result.metadata, result)
 
+            print(result.selected_tools)
+
             # Step 3: Organ list generation
             result.expected_organs = self._step_organ_list(result.metadata, result)
+
+            print(result.expected_organs)
 
             # Step 4: Segmentation (per tool)
             seg_dirs = self._step_segmentation(
                 case_path, image_path, result.metadata, result
             )
 
+            print(seg_dirs)
+
             # Step 5: QC (Tier 1 + Tier 2)
             self._step_qc(case_path, seg_dirs, result)
 
-            # Step 5b: STAPLE consensus (optional, off by default)
+            # Step 5b: weighted fusion
             if self.consensus and len(seg_dirs) >= 2:
-                self._step_consensus(case_path, seg_dirs, result)
+                self._step_weighted_fusion(case_path, seg_dirs, result)
 
-            # Step 6: LLM QC interpretation (Tier 3)
-            self._step_qc_interpretation(result)
+            # [skipped] Step 6: LLM QC interpretation (Tier 3)
+            # self._step_qc_interpretation(result)
 
             # Step 7: Radiomics extraction
             # If consensus masks exist, prefer them for radiomics
@@ -273,7 +282,7 @@ class CasePipeline:
         result.total_time_s = round(time.time() - t0, 2)
 
         # save QC report
-        self._write_case_qc_report(result)
+        # self._write_case_qc_report(result)
 
         # Save per-case log
         self._save_case_log(result)
@@ -528,15 +537,23 @@ class CasePipeline:
         """Apply LCC + hole fill to all masks in all seg_dirs."""
         t0 = time.time()
         try:
-            from processing.postprocessing import keep_largest_component, fill_holes
             import nibabel as nib
             import numpy as np
 
+            _SKIP_STEMS = {
+                    "statistics", "combined", "multilabel", "multilabel_seg",
+                    "image_nifti_seg", "segmentation", "manifest",
+                }
+
             for tool_name, seg_dir in seg_dirs.items():
                 if not os.path.isdir(seg_dir):
-                    continue
+                    continuE
+
                 for fname in os.listdir(seg_dir):
                     if not fname.endswith(".nii.gz"):
+                        continue
+                    raw_name = fname.replace(".nii.gz", "")
+                    if raw_name in _SKIP_STEMS:
                         continue
                     fpath = os.path.join(seg_dir, fname)
                     try:
@@ -544,8 +561,8 @@ class CasePipeline:
                         data = np.asarray(nii.dataobj, dtype=np.uint8)
                         if np.sum(data > 0) < 10:
                             continue
-                        cleaned = keep_largest_component(data)
-                        cleaned = fill_holes(cleaned)
+                        cleaned = fill_holes(data)
+                        cleaned = keep_largest_component(cleaned)
                         if not np.array_equal(data, cleaned):
                             out_nii = nib.Nifti1Image(cleaned, nii.affine, nii.header)
                             nib.save(out_nii, fpath)
@@ -555,8 +572,73 @@ class CasePipeline:
             result.warnings.append("Postprocessing skipped: nibabel/scipy not available")
         result.step_times["postprocess"] = round(time.time() - t0, 2)
 
-    # ── Step 5: QC (Tier 1 + Tier 2) ───────────────────────────────────────
+    
+    def _materialize_tier1_filtered_dirs(
+        self,
+        case_path: str,
+        seg_dirs: Dict[str, str],
+        tool_results: List[Any],
+        expected_organs: Optional[List[str]] = None,
+    ) -> tuple[Dict[str, str], Dict[str, Any]]:
+        """
+        Create on-disk Tier-1-filtered segmentation dirs.
 
+        Keep an organ mask only if:
+        - it is in the targeted expected organ subset (if provided)
+        - volume_ml > 1e-3
+        - volume_in_range == True
+        - the mask file exists
+        """
+        expected_set = set(expected_organs or [])
+
+        filtered_root = os.path.join(case_path, "qc_tier1_filtered")
+        os.makedirs(filtered_root, exist_ok=True)
+
+        filtered_seg_dirs: Dict[str, str] = {}
+        summary: Dict[str, Any] = {}
+
+        for tr in tool_results:
+            tool_name = tr.tool_name
+            src_dir = seg_dirs.get(tool_name)
+            if not src_dir or not os.path.isdir(src_dir):
+                continue
+
+            dst_dir = os.path.join(filtered_root, os.path.basename(src_dir))
+            os.makedirs(dst_dir, exist_ok=True)
+
+            kept = []
+            rejected = []
+
+            for oqc in tr.organ_results:
+                in_target_subset = True if not expected_set else (oqc.organ in expected_set)
+
+                hard_keep = (
+                    in_target_subset
+                    and oqc.volume_ml > 1e-3
+                    and oqc.volume_in_range
+                    and os.path.isfile(oqc.mask_path)
+                )
+
+                if hard_keep:
+                    shutil.copy2(oqc.mask_path, os.path.join(dst_dir, os.path.basename(oqc.mask_path)))
+                    kept.append(oqc.organ)
+                else:
+                    rejected.append(oqc.organ)
+
+            if kept:
+                filtered_seg_dirs[tool_name] = dst_dir
+
+            summary[tool_name] = {
+                "kept_organs": kept,
+                "rejected_organs": rejected,
+                "kept_count": len(kept),
+                "rejected_count": len(rejected),
+                "filtered_seg_dir": dst_dir,
+            }
+
+        return filtered_seg_dirs, summary
+
+    # ── Step 5: QC (Tier 1 + Tier 2) ───────────────────────────────────────
     def _step_qc(
         self,
         case_path: str,
@@ -581,19 +663,29 @@ class CasePipeline:
             for tool_name, seg_dir in seg_dirs.items():
                 if os.path.isdir(seg_dir):
                     t1 = self._gqc.run(
-                        case_path, seg_dir, tool_name,
+                        case_path,
+                        seg_dir,
+                        tool_name,
                         expected_organs=result.expected_organs,
                         modality=modality,
                     )
                     report.tool_results.append(t1)
 
-            # Tier 2: multi-tool agreement (if ≥2 tools)
-            if len(seg_dirs) >= 2:
-                report.agreement = self._mtqc.run(case_path, seg_dirs)
+            # Materialize Tier-1 filtered segmentation dirs on disk
+            filtered_seg_dirs, tier1_summary = self._materialize_tier1_filtered_dirs(
+                case_path=case_path,
+                seg_dirs=seg_dirs,
+                tool_results=report.tool_results,
+                expected_organs=result.expected_organs,
+            )
+            result._tier1_filtered_seg_dirs = filtered_seg_dirs
+
+            # Tier 2: multi-tool agreement only on Tier-1-filtered masks
+            if len(filtered_seg_dirs) >= 2:
+                report.agreement = self._mtqc.run(case_path, filtered_seg_dirs)
 
             report.compute_overall()
 
-            # Store serializable summary
             result.qc_report = {
                 "overall_severity": report.overall_severity,
                 "num_tools": len(report.tool_results),
@@ -608,15 +700,18 @@ class CasePipeline:
                     }
                     for tr in report.tool_results
                 ],
+                "tier1_filtering": tier1_summary,
             }
+
             if report.agreement:
                 result.qc_report["agreement"] = {
                     "mean_dice": round(report.agreement.mean_dice, 3),
+                    "mean_bbox_overlap": round(report.agreement.mean_bbox_overlap, 3),
+                    "mean_centroid_distance_mm": round(report.agreement.mean_centroid_distance_mm, 3),
                     "organs_agree": report.agreement.organs_with_agreement,
                     "organs_disagree": report.agreement.organs_with_disagreement,
                 }
 
-            # Stash the full report object for Tier 3
             result._qc_report_obj = report
 
         except Exception as e:
@@ -625,96 +720,378 @@ class CasePipeline:
 
         result.step_times["qc"] = round(time.time() - t0, 2)
 
-    # ── Step 5b: STAPLE consensus (optional) ────────────────────────────────
 
-    def _step_consensus(
+    # old version
+    # def _step_qc(
+    #     self,
+    #     case_path: str,
+    #     seg_dirs: Dict[str, str],
+    #     result: CaseResult,
+    # ) -> None:
+    #     t0 = time.time()
+    #     try:
+    #         from qc.geometric_qc import GeometricQC
+    #         from qc.multi_tool_qc import MultiToolQC
+    #         from qc.dataclasses import CaseQCReport
+
+    #         if self._gqc is None:
+    #             self._gqc = GeometricQC()
+    #         if self._mtqc is None:
+    #             self._mtqc = MultiToolQC()
+
+    #         report = CaseQCReport(case_id=result.case_id, case_path=case_path)
+
+    #         # Tier 1: per-tool geometric QC
+    #         modality = result.metadata.get("modality", "CT")
+    #         for tool_name, seg_dir in seg_dirs.items():
+    #             if os.path.isdir(seg_dir):
+    #                 t1 = self._gqc.run(
+    #                     case_path, seg_dir, tool_name,
+    #                     expected_organs=result.expected_organs,
+    #                     modality=modality,
+    #                 )
+    #                 report.tool_results.append(t1)
+
+    #         # filter out the rejected masks; we next scrutinize among the geometrically valid masks
+
+    #         # Tier 2: multi-tool agreement (if ≥2 tools)
+    #         if len(seg_dirs) >= 2:
+    #             report.agreement = self._mtqc.run(case_path, seg_dirs)
+
+    #         report.compute_overall()
+
+    #         # Store serializable summary
+    #         result.qc_report = {
+    #             "overall_severity": report.overall_severity,
+    #             "num_tools": len(report.tool_results),
+    #             "per_tool": [
+    #                 {
+    #                     "tool": tr.tool_name,
+    #                     "severity": tr.worst_severity,
+    #                     "num_organs": tr.num_organs,
+    #                     "num_in_fov": tr.num_organs_in_fov,
+    #                     "num_flagged": tr.num_organs_flagged,
+    #                     "total_flags": tr.total_flags,
+    #                 }
+    #                 for tr in report.tool_results
+    #             ],
+    #         }
+    #         if report.agreement:
+    #             result.qc_report["agreement"] = {
+    #                 "mean_dice": round(report.agreement.mean_dice, 3),
+    #                 "organs_agree": report.agreement.organs_with_agreement,
+    #                 "organs_disagree": report.agreement.organs_with_disagreement,
+    #             }
+
+    #         # Stash the full report object for Tier 3
+    #         result._qc_report_obj = report
+
+    #     except Exception as e:
+    #         logger.error("[%s] QC failed: %s", result.case_id, e)
+    #         result.warnings.append(f"QC error: {e}")
+
+    #     result.step_times["qc"] = round(time.time() - t0, 2)
+
+    # ── Step 5b: fusing masks ────────────────────────────────
+
+    def _step_weighted_fusion(
         self,
         case_path: str,
         seg_dirs: Dict[str, str],
         result: CaseResult,
     ) -> None:
-        """Generate STAPLE consensus masks from multi-tool segmentations."""
+        """
+        Generate weighted fusion masks from Tier-1-filtered dirs and Tier-2 kept tools.
+        Saves:
+        - binary fused masks -> segmentations_consensus/
+        - soft fused masks   -> segmentations_consensus_soft/
+        """
         t0 = time.time()
         try:
-            from processing.staple_consensus import generate_case_consensus
+            report = getattr(result, "_qc_report_obj", None)
+            filtered_seg_dirs = getattr(result, "_tier1_filtered_seg_dirs", None)
 
-            consensus_result = generate_case_consensus(
-                case_path=case_path,
-                seg_dirs=seg_dirs,
-                method=self.consensus_method,
-                min_tools=2,
-            )
+            if report is None or report.agreement is None:
+                result.warnings.append("Weighted fusion skipped: no Tier-2 agreement report available")
+                result.step_times["consensus"] = round(time.time() - t0, 2)
+                return
 
-            result._consensus_dir = consensus_result["consensus_dir"]
+            if not filtered_seg_dirs or len(filtered_seg_dirs) < 2:
+                result.warnings.append("Weighted fusion skipped: not enough Tier-1 filtered tool dirs")
+                result.step_times["consensus"] = round(time.time() - t0, 2)
+                return
+
+            binary_dir = os.path.join(case_path, "segmentations_consensus")
+            soft_dir = os.path.join(case_path, "segmentations_consensus_soft")
+            os.makedirs(binary_dir, exist_ok=True)
+            os.makedirs(soft_dir, exist_ok=True)
+
+            organs_fused = []
+            organs_skipped = []
+
+            for organ, kept_tools in report.agreement.kept_tools_by_organ.items():
+                if len(kept_tools) < 2:
+                    organs_skipped.append(organ)
+                    continue
+
+                mask_arrays = []
+                voxel_dims = None
+                template_nii = None
+
+                for tool_name in kept_tools:
+                    seg_dir = filtered_seg_dirs.get(tool_name)
+                    if not seg_dir:
+                        continue
+
+                    mask_path = self._find_mask_path_for_organ(seg_dir, organ)
+                    if mask_path is None:
+                        continue
+
+                    nii = nib.load(mask_path)
+                    data = np.asarray(nii.dataobj, dtype=np.float32)
+
+                    mask_arrays.append(data)
+                    if voxel_dims is None:
+                        voxel_dims = nii.header.get_zooms()[:3]
+                        template_nii = nii
+
+                if len(mask_arrays) < 2 or template_nii is None or voxel_dims is None:
+                    organs_skipped.append(organ)
+                    continue
+
+                soft_map, binary_map, weights = self._compute_weighted_fusion(
+                    masks=mask_arrays,
+                    spacing_hwd=tuple(float(x) for x in voxel_dims[:3]),
+                )
+
+                # light final cleanup only on binary fused mask
+                binary_clean = fill_holes(binary_map.astype(np.uint8))
+                binary_clean = keep_largest_component(binary_clean).astype(np.uint8)
+
+                soft_nii = nib.Nifti1Image(soft_map.astype(np.float32), template_nii.affine, template_nii.header)
+                bin_nii = nib.Nifti1Image(binary_clean.astype(np.uint8), template_nii.affine, template_nii.header)
+
+                nib.save(soft_nii, os.path.join(soft_dir, f"{organ}.nii.gz"))
+                nib.save(bin_nii, os.path.join(binary_dir, f"{organ}.nii.gz"))
+
+                organs_fused.append({
+                    "organ": organ,
+                    "kept_tools": kept_tools,
+                    "weights": [float(w) for w in weights],
+                })
+
+            result._consensus_dir = binary_dir
+            result._consensus_soft_dir = soft_dir
+
             result.qc_report["consensus"] = {
-                "organs_fused": len(consensus_result["organs_fused"]),
-                "organs_skipped": len(consensus_result["organs_skipped"]),
-                "method": self.consensus_method,
-                "time_s": consensus_result["total_time_s"],
+                "organs_fused": len(organs_fused),
+                "organs_skipped": len(organs_skipped),
+                "method": "weighted_bbox_centroid_shape_fusion",
+                "binary_dir": binary_dir,
+                "soft_dir": soft_dir,
+                "details": organs_fused,
+                "time_s": round(time.time() - t0, 2),
             }
 
             logger.info(
-                "[%s] Consensus: %d organs fused via %s (%.1fs)",
+                "[%s] Weighted fusion: %d organs fused, %d skipped",
                 result.case_id,
-                len(consensus_result["organs_fused"]),
-                self.consensus_method,
-                consensus_result["total_time_s"],
+                len(organs_fused),
+                len(organs_skipped),
             )
 
         except Exception as e:
-            logger.error("[%s] Consensus generation failed: %s", result.case_id, e)
-            result.warnings.append(f"Consensus error: {e}")
+            logger.error("[%s] Weighted fusion failed: %s", result.case_id, e)
+            result.warnings.append(f"Weighted fusion error: {e}")
 
         result.step_times["consensus"] = round(time.time() - t0, 2)
 
-    # ── Step 6: LLM QC interpretation (Tier 3) ─────────────────────────────
+    
+    def _find_mask_path_for_organ(self, seg_dir: str, organ: str) -> Optional[str]:
+        from processing.format_utils import normalize_organ_name
 
-    def _step_qc_interpretation(self, result: CaseResult) -> None:
-        report = getattr(result, "_qc_report_obj", None)
-        if report is None or not report.tool_results:
-            return
+        for fname in os.listdir(seg_dir):
+            if not fname.endswith(".nii.gz"):
+                continue
+            raw_name = fname.replace(".nii.gz", "")
+            if normalize_organ_name(raw_name) == organ:
+                return os.path.join(seg_dir, fname)
+        return None
 
-        t0 = time.time()
 
-        from qc.qc_interpreter import QCInterpreter
+    @staticmethod
+    def _compute_centroid_hwd(mask: np.ndarray) -> Optional[np.ndarray]:
+        coords = np.argwhere(mask > 0)
+        if coords.size == 0:
+            return None
+        return coords.mean(axis=0)
 
-        if self.no_llm or self.clinical_llm is None:
-            # Use rule-based fallback (mock LLM returns None → triggers fallback gating)
-            class _MockLLM:
-                def query_json(self, *a, **kw):
-                    return None
-            interp_engine = QCInterpreter(_MockLLM())
+
+    @staticmethod
+    def _centroid_distance_hwd(mask_a: np.ndarray, mask_b: np.ndarray, spacing_hwd: tuple) -> float:
+        ca = CasePipeline._compute_centroid_hwd(mask_a)
+        cb = CasePipeline._compute_centroid_hwd(mask_b)
+        if ca is None or cb is None:
+            return float("inf")
+        diff = (ca - cb) * np.asarray(spacing_hwd, dtype=float)
+        return float(np.linalg.norm(diff))
+
+
+    @staticmethod
+    def _compute_tight_bbox_hwd(mask: np.ndarray) -> Optional[tuple[int, int, int, int, int, int]]:
+        coords = np.argwhere(mask > 0)
+        if coords.size == 0:
+            return None
+        hmin, wmin, dmin = coords.min(axis=0)
+        hmax, wmax, dmax = coords.max(axis=0)
+        return int(hmin), int(hmax), int(wmin), int(wmax), int(dmin), int(dmax)
+
+
+    @staticmethod
+    def _bbox_overlap_ratio_hwd(mask_a: np.ndarray, mask_b: np.ndarray) -> float:
+        bbox_a = CasePipeline._compute_tight_bbox_hwd(mask_a)
+        bbox_b = CasePipeline._compute_tight_bbox_hwd(mask_b)
+        if bbox_a is None or bbox_b is None:
+            return 0.0
+
+        ah0, ah1, aw0, aw1, ad0, ad1 = bbox_a
+        bh0, bh1, bw0, bw1, bd0, bd1 = bbox_b
+
+        ih0 = max(ah0, bh0)
+        ih1 = min(ah1, bh1)
+        iw0 = max(aw0, bw0)
+        iw1 = min(aw1, bw1)
+        id0 = max(ad0, bd0)
+        id1 = min(ad1, bd1)
+
+        if ih0 > ih1 or iw0 > iw1 or id0 > id1:
+            return 0.0
+
+        inter = (ih1 - ih0 + 1) * (iw1 - iw0 + 1) * (id1 - id0 + 1)
+        vol_a = (ah1 - ah0 + 1) * (aw1 - aw0 + 1) * (ad1 - ad0 + 1)
+        vol_b = (bh1 - bh0 + 1) * (bw1 - bw0 + 1) * (bd1 - bd0 + 1)
+
+        denom = min(vol_a, vol_b)
+        if denom <= 0:
+            return 0.0
+
+        return float(inter / denom)
+
+
+    @staticmethod
+    def _signed_distance_map_hwd(mask: np.ndarray, spacing_hwd: tuple) -> np.ndarray:
+        bin_mask = mask > 0
+        inside = distance_transform_edt(bin_mask, sampling=spacing_hwd)
+        outside = distance_transform_edt(~bin_mask, sampling=spacing_hwd)
+        return inside - outside
+
+
+    def _compute_weighted_fusion(
+        self,
+        masks: List[np.ndarray],
+        spacing_hwd: tuple,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Weighted fusion after Tier-1 and Tier-2 filtering.
+
+        Weights are derived from:
+        - mean bbox overlap to others      (higher is better)
+        - mean centroid distance to others (lower is better)
+        """
+        k = len(masks)
+        if k == 0:
+            raise ValueError("No masks provided for fusion")
+        if k == 1:
+            bin_mask = (masks[0] > 0).astype(np.float32)
+            return bin_mask, (bin_mask > 0.5).astype(np.uint8), np.array([1.0], dtype=np.float32)
+
+        bin_masks = [(m > 0).astype(np.float32) for m in masks]
+
+        mean_bbox = np.zeros(k, dtype=np.float32)
+        mean_cdist = np.zeros(k, dtype=np.float32)
+
+        for i in range(k):
+            bbox_vals = []
+            cdist_vals = []
+            for j in range(k):
+                if i == j:
+                    continue
+                bbox_vals.append(self._bbox_overlap_ratio_hwd(bin_masks[i], bin_masks[j]))
+                cdist_vals.append(self._centroid_distance_hwd(bin_masks[i], bin_masks[j], spacing_hwd))
+            mean_bbox[i] = float(np.mean(bbox_vals)) if bbox_vals else 1.0
+            mean_cdist[i] = float(np.mean(cdist_vals)) if cdist_vals else 0.0
+
+        # centroid similarity from distance
+        positive_d = mean_cdist[mean_cdist > 0]
+        scale = float(np.median(positive_d)) if positive_d.size > 0 else 1.0
+        centroid_score = 1.0 / (1.0 + (mean_cdist / max(scale, 1e-6)))
+
+        raw_weights = np.clip(mean_bbox, 1e-6, None) * np.clip(centroid_score, 1e-6, None)
+        if float(raw_weights.sum()) <= 0:
+            weights = np.ones(k, dtype=np.float32) / float(k)
         else:
-            # MedGemma-27B: clinical domain knowledge for QC interpretation
-            interp_engine = QCInterpreter(self.clinical_llm)
+            weights = raw_weights / float(raw_weights.sum())
 
-        try:
-            # Interpret the first (primary) tool's results
-            primary_tr = report.tool_results[0]
-            interp = interp_engine.interpret(
-                primary_tr,
-                study_description=result.metadata.get("study_description", result.case_id),
-                anatomy=result.metadata.get("anatomy", "UNKNOWN"),
-            )
-            report.interpretation = interp
-            report.compute_overall()
+        stack_bin = np.stack(bin_masks, axis=0)
+        soft_map = np.average(stack_bin, axis=0, weights=weights).astype(np.float32)
 
-            # Update QC report with interpretation
-            result.qc_report["interpretation"] = {
-                "overall_quality": interp.overall_quality,
-                "usable_for_radiomics": interp.usable_for_radiomics,
-                "unusable_organs": interp.unusable_organs,
-                "extract": interp.extract,
-                "skip": interp.skip,
-                "explanation": interp.explanation,
-            }
-            result.qc_report["overall_severity"] = report.overall_severity
+        sdms = np.stack(
+            [self._signed_distance_map_hwd(m, spacing_hwd).astype(np.float32) for m in bin_masks],
+            axis=0,
+        )
+        mean_sdm = np.average(sdms, axis=0, weights=weights)
+        binary_map = (mean_sdm > 0).astype(np.uint8)
 
-        except Exception as e:
-            logger.error("[%s] QC interpretation failed: %s", result.case_id, e)
-            result.warnings.append(f"QC interpretation error: {e}")
+        return soft_map, binary_map, weights.astype(np.float32)
 
-        result.step_times["qc_interpretation"] = round(time.time() - t0, 2)
+    # # ── Step 6: LLM QC interpretation (Tier 3) ─────────────────────────────
+
+    # def _step_qc_interpretation(self, result: CaseResult) -> None:
+    #     report = getattr(result, "_qc_report_obj", None)
+    #     if report is None or not report.tool_results:
+    #         return
+
+    #     t0 = time.time()
+
+    #     from qc.qc_interpreter import QCInterpreter
+
+    #     if self.no_llm or self.clinical_llm is None:
+    #         # Use rule-based fallback (mock LLM returns None → triggers fallback gating)
+    #         class _MockLLM:
+    #             def query_json(self, *a, **kw):
+    #                 return None
+    #         interp_engine = QCInterpreter(_MockLLM())
+    #     else:
+    #         # MedGemma-27B: clinical domain knowledge for QC interpretation
+    #         interp_engine = QCInterpreter(self.clinical_llm)
+
+    #     try:
+    #         # Interpret the first (primary) tool's results
+    #         primary_tr = report.tool_results[0]
+    #         interp = interp_engine.interpret(
+    #             primary_tr,
+    #             study_description=result.metadata.get("study_description", result.case_id),
+    #             anatomy=result.metadata.get("anatomy", "UNKNOWN"),
+    #         )
+    #         report.interpretation = interp
+    #         report.compute_overall()
+
+    #         # Update QC report with interpretation
+    #         result.qc_report["interpretation"] = {
+    #             "overall_quality": interp.overall_quality,
+    #             "usable_for_radiomics": interp.usable_for_radiomics,
+    #             "unusable_organs": interp.unusable_organs,
+    #             "extract": interp.extract,
+    #             "skip": interp.skip,
+    #             "explanation": interp.explanation,
+    #         }
+    #         result.qc_report["overall_severity"] = report.overall_severity
+
+    #     except Exception as e:
+    #         logger.error("[%s] QC interpretation failed: %s", result.case_id, e)
+    #         result.warnings.append(f"QC interpretation error: {e}")
+
+    #     result.step_times["qc_interpretation"] = round(time.time() - t0, 2)
 
     # ── Step 7: Radiomics extraction ────────────────────────────────────────
     def _step_radiomics(

@@ -159,31 +159,31 @@ Each path must be a directory containing `image_nifti.nii.gz`.
 
 ```bash
 # Full pipeline with LLM (production)
-python -m orchestrator.batch_runner \
+/home/soumitri/env/miniconda3/bin/conda run -n cdw_llm python -m orchestrator.batch_runner \
   --filelist /data/soumitri/new_data_paths/ct_axial_cases.json \
   --gpus 0,1 \
   --workers 2
 
 # Without LLM (uses path heuristics + rule-based QC)
-python -m orchestrator.batch_runner \
+/home/soumitri/env/miniconda3/bin/conda run -n cdw_llm python -m orchestrator.batch_runner \
   --filelist /data/soumitri/new_data_paths/ct_axial_cases.json \
   --gpus 0,1 \
   --workers 2 \
   --no-llm
 
 # Dry run (mock segmentation, real QC on existing masks)
-python -m orchestrator.batch_runner \
+/home/soumitri/env/miniconda3/bin/conda run -n cdw_llm python -m orchestrator.batch_runner \
   --filelist /data/soumitri/new_data_paths/ct_axial_cases.json \
   --dry-run
 
 # Skip radiomics (just segmentation + QC)
-python -m orchestrator.batch_runner \
+/home/soumitri/env/miniconda3/bin/conda run -n cdw_llm python -m orchestrator.batch_runner \
   --filelist /data/soumitri/new_data_paths/ct_axial_cases.json \
   --gpus 0 \
   --skip-radiomics
 
 # Resume failed cases from a previous run
-python -m orchestrator.batch_runner \
+/home/soumitri/env/miniconda3/bin/conda run -n cdw_llm python -m orchestrator.batch_runner \
   --filelist /data/soumitri/new_data_paths/ct_axial_cases.json \
   --retry-failed
 ```

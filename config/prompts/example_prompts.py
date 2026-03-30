@@ -18,31 +18,16 @@ METADATA_EXTRACTION_SINGLE = """You are a medical imaging metadata parser. Given
 Return ONLY a JSON object with these fields:
 - modality: one of [CT, MRI, PET_CT, NM, CR, US, FL, UNKNOWN]
 - anatomy: one of [head, neck, chest, abdomen, pelvis, abdomen_pelvis, chest_abdomen_pelvis, spine, extremity, whole_body, cardiac, UNKNOWN]. Parse ALL body regions from the path — e.g. CT_CHEST_ABD_PELVIS → chest_abdomen_pelvis (not just abdomen_pelvis).
-- shape: one of [2D, 3D, 4D]
+- shape: 3D always
 - is_diagnostic: true/false (see rules below)
 - series_type: brief description (e.g. "axial soft tissue CT with contrast", "T1 VIBE Dixon MRI")
 - contrast_status: one of [pre, post, with, without, unknown]
 - mri_sequence: if MRI, the sequence type (e.g. T1, T2, FLAIR, DWI, VIBE, Dixon, SWI, HASTE, TSE). Otherwise null.
 
 Rules for is_diagnostic:
-- Default TRUE (most series are diagnostic)
-- Set FALSE only if the series name suggests any of:
-  * Scout or localizer
-  * Screen save or screen capture
-  * MIP, MinIP, or mIP projection
-  * Coronal or sagittal reformat — any of: COR_, _cor_, _cor, SAG_, _sag_, _sag, or the words "Coronal"/"Sagittal" anywhere in the name (case-insensitive)
-  * Bone window reconstruction (_BW, _BONE, _WB)
-  * Metal artifact reduction (iMAR alone without a diagnostic base series)
-  * Subtraction maps (_SUB or SUB_ — prefix or suffix)
-  * Phase images (_Pha)
-  * Fluoroscopy
-  * PET NAC (non-attenuation corrected)
-  * Dose report
-  * UNKNOWN series name
-  * PET reformats (PET_AC_Cor, PET_AC_Sag, CORONAL/SAGITTAL as standalone series names)
-- Note: iMAR combined with a diagnostic series name (e.g. Abdomen_Pelvis_3mm_Axial_ST_iMAR) is still diagnostic
-- Note: _BW at end of series name = bone window = NOT diagnostic
-- Note: Lung window (_LW) is a valid diagnostic reconstruction
+  Set `is_diagnostic = TRUE` by default.
+  Set `is_diagnostic` to FALSE only if the series is a scout/localizer, screen save, MIP/MinIP/mIP, bone window, subtraction map, phase image, fluoroscopy, PET NAC, dose report, UNKNOWN, or angiography reformat.
+  If unsure, keep it TRUE
 
 File path: {file_path}
 Shape: {shape}
@@ -60,11 +45,10 @@ Shape: {shape}
 
 METADATA_EXTRACTION_BATCH = """You are a medical imaging metadata parser. For each file path below, return a JSON array. Each element must have: modality, anatomy, shape, is_diagnostic, series_type, contrast_status, mri_sequence.
 
-Rules for is_diagnostic:
-- Default TRUE
-- FALSE if: scout/localizer, screen save, MIP/MinIP/mIP, coronal/sagittal reformat (COR_, SAG_, _cor, _sag in series name), bone window (_BW, _BONE), iMAR alone, subtraction maps (_SUB), phase images (_Pha), fluoroscopy, PET NAC, dose report, UNKNOWN, angiography reformats (PET_AC_Cor, PET_AC_Sag, CORONAL/SAGITTAL as standalone series names)
-- Note: iMAR combined with a diagnostic series (e.g. Abdomen_Pelvis_3mm_Axial_ST_iMAR) is still diagnostic
-- Note: _BW = bone window = NOT diagnostic
+- Set `is_diagnostic = TRUE` by default.
+- Set `is_diagnostic` to FALSE only if the series is a scout/localizer, screen save, MIP/MinIP/mIP, bone window, subtraction map, phase image, fluoroscopy, PET NAC, dose report, UNKNOWN, or angiography reformat.
+- If unsure, keep it TRUE
+
 
 {numbered_paths_with_shapes}"""
 
@@ -91,6 +75,7 @@ Available tools (use these EXACT names in your response):
 - VIBESegmentator: MRI only (3D). 72 structures. Full torso. Works on multiple MRI sequences.
 - VISTA3D: CT and MRI (3D). 345+ structures including detailed brain parcellation.
 - VoxTell: CT, MRI, PET (3D). Free-text prompted. Use for targeted segmentation of specific structures.
+- TextMedSeg3D: CT, MRI, PET (3D). Free-text prompted. Use for targeted segmentation of 497 specific structures.
 
 Organ naming convention (use these formats in targeted_tools organs and qc_organs):
 - Paired organs use _left/_right suffix: kidney_left, kidney_right, adrenal_gland_left, adrenal_gland_right
@@ -103,9 +88,11 @@ Selection rules (MANDATORY — follow these exactly):
 2. For CT: primary_tools MUST include TotalSegmentator_CT, MRSegmentator, VISTA3D
 3. For MRI: primary_tools MUST include TotalSegmentator_MR, MRSegmentator, MRISegmenter, VIBESegmentator, VISTA3D
 4. For PET_CT: primary_tools MUST include TotalSegmentator_CT, MRSegmentator, VISTA3D (same as CT — the CT component is segmented)
-5. VoxTell ALWAYS goes in targeted_tools (never in primary or secondary)
-6. targeted_tools MUST ALWAYS contain VoxTell with organ lists for structures supplementary to the fixed-class tools
+5. VoxTell and TextMedSeg3D ALWAYS goes in targeted_tools (never in primary or secondary)
+6. targeted_tools MUST ALWAYS contain VoxTell and TextMedSeg3D with organ lists for all structures present in the anatomy.
 7. For brain: always include VISTA3D (has detailed brain parcellation)
+8. for qc_organs: include only the main organs of the anatomy. abdominal scans must show liver, kidney_left, kidney_right, spleen, pancreas and a few other major organs. A chest radiograph should show lung lobes and cardiac substructures. Brain MRI should have brain. 
+These are the organs that will be used for text-promptable models as well as quality control checks.
 
 Case metadata:
 {case_metadata_json}
@@ -113,7 +100,7 @@ Case metadata:
 Return a JSON object with:
 - primary_tools: list of ALL compatible fixed-class tools (do NOT split into primary/secondary)
 - secondary_tools: always an empty list []
-- targeted_tools: MUST contain TextMedSeg3D and VoxTell, each as {{"tool": "<name>", "organs": ["organ1", "organ2"]}} with organs supplementary to the fixed-class tools
+- targeted_tools: MUST contain TextMedSeg3D and VoxTell, each as {{"tool": "<name>", "organs": ["organ1", "organ2"]}} with the main organs of the anatomy. 
 - qc_organs: list of organs to check in QC based on the detected anatomy
 - reasoning: one sentence explaining the selection"""
 
@@ -217,9 +204,12 @@ Return structured JSON with these 6 sections."""
 #       Use LLM version only for unusual/ambiguous anatomies
 # ============================================================================
 
-ORGAN_LIST_GENERATION = """You are a medical imaging anatomy expert. Given the detected body region of a scan, list all organs and structures that should be visible and checkable in a segmentation quality assessment.
+ORGAN_LIST_GENERATION = """You are a medical imaging anatomy expert. Given the detected body region of a scan, list the major or primary organs and structures that should be visible and checkable in a segmentation quality assessment.
 
-Only list organs that would be fully or substantially within the field of view for this body region. Do not list organs that would only be partially captured at the edges.
+For example, abdominal scans must show liver, kidney_left, kidney_right, spleen, gallbladder, pancreas and a few other major organs. A chest radiograph should show lung lobes and cardiac substructures. Brain MRI should have brain. 
+These are the organs that will be used for text-promptable models as well as quality control checks.
+
+Only list organs that would be fully or substantially within the field of view for this body region. Do not list organs that would only be partially captured at the edges. Only list major organs.
 
 Detected anatomy: {anatomy}
 Modality: {modality}

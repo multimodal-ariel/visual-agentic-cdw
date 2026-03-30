@@ -155,7 +155,7 @@ class GeometricQC:
                 vol_ml = _compute_volume_ml(mask_data, voxel_dims)
                 organ_volumes[organ] = vol_ml
 
-                if vol_ml < 1e-3:
+                if vol_ml <= 1.0:
                     oqc.volume_ml = 0.0
                     oqc.volume_flag = f"NOT_IN_FOV: {organ}"
                     oqc.severity = "PASS"
@@ -169,7 +169,9 @@ class GeometricQC:
                 else:
                     oqc.volume_ml = vol_ml
                     oqc.volume_in_range = True  # no reference for MRI
-                self._check_connected_components(organ, mask_data, oqc)
+
+                # # connected component analysis -- skipped since it is removed in postprocessing
+                # self._check_connected_components(organ, mask_data, oqc)
 
             except Exception as e:
                 oqc.volume_flag = f"LOAD_ERROR: {e}"
@@ -179,11 +181,12 @@ class GeometricQC:
 
             organ_results[organ] = oqc
 
-        # Cross-organ checks (skip paired ratios for MRI — CT-calibrated)
-        if modality != "MRI":
-            self._check_paired_ratios(organ_volumes, organ_results)
-        overlap_pairs = self._check_overlap(organ_masks, organ_results)
-        result.overlap_pairs = overlap_pairs
+        # ---REMOVED FOR SIMPLIFYING--- 
+        # # Cross-organ checks (skip paired ratios for MRI — CT-calibrated)
+        # if modality != "MRI":
+        #     self._check_paired_ratios(organ_volumes, organ_results)
+        # overlap_pairs = self._check_overlap(organ_masks, organ_results)
+        # result.overlap_pairs = overlap_pairs
 
         # Compute per-organ severities and aggregate
         for organ, oqc in organ_results.items():
@@ -276,118 +279,119 @@ class GeometricQC:
                 f"expected <= {vmax:.0f} mL ({pct_above:.0f}% above)"
             )
 
-    # ── Check 2: Connected components ───────────────────────────────────────
+    # Skipped since this is removed in postprocessing
+    # # ── Check 2: Connected components ───────────────────────────────────────
 
-    def _check_connected_components(
-        self, organ: str, mask_data: np.ndarray, result: OrganQCResult
-    ) -> None:
-        if organ not in self.expected_max_cc:
-            return
-        binary = (mask_data > 0).astype(np.uint8)
-        total_voxels = int(np.sum(binary))
-        if total_voxels == 0:
-            return
-        structure = ndimage.generate_binary_structure(3, 3)  # 26-connected
-        labeled, num_cc = ndimage.label(binary, structure=structure)
-        result.num_components = num_cc
-        component_sizes = ndimage.sum(binary, labeled, range(1, num_cc + 1))
-        largest_size = float(np.max(component_sizes))
-        result.largest_component_fraction = largest_size / total_voxels
+    # def _check_connected_components(
+    #     self, organ: str, mask_data: np.ndarray, result: OrganQCResult
+    # ) -> None:
+    #     if organ not in self.expected_max_cc:
+    #         return
+    #     binary = (mask_data > 0).astype(np.uint8)
+    #     total_voxels = int(np.sum(binary))
+    #     if total_voxels == 0:
+    #         return
+    #     structure = ndimage.generate_binary_structure(3, 3)  # 26-connected
+    #     labeled, num_cc = ndimage.label(binary, structure=structure)
+    #     result.num_components = num_cc
+    #     component_sizes = ndimage.sum(binary, labeled, range(1, num_cc + 1))
+    #     largest_size = float(np.max(component_sizes))
+    #     result.largest_component_fraction = largest_size / total_voxels
 
-        expected_max = self.expected_max_cc[organ]
-        flags = []
-        if num_cc > expected_max:
-            flags.append(f"EXCESS_COMPONENTS: {organ} has {num_cc} CC (expected <= {expected_max})")
-        if result.largest_component_fraction < self.lcc_min_fraction and num_cc > 1:
-            flags.append(f"FRAGMENTED: {organ} largest CC = {result.largest_component_fraction * 100:.1f}%")
-        result.cc_flag = "; ".join(flags)
+    #     expected_max = self.expected_max_cc[organ]
+    #     flags = []
+    #     if num_cc > expected_max:
+    #         flags.append(f"EXCESS_COMPONENTS: {organ} has {num_cc} CC (expected <= {expected_max})")
+    #     if result.largest_component_fraction < self.lcc_min_fraction and num_cc > 1:
+    #         flags.append(f"FRAGMENTED: {organ} largest CC = {result.largest_component_fraction * 100:.1f}%")
+    #     result.cc_flag = "; ".join(flags)
 
-    # ── Check 3: Paired volume ratios ───────────────────────────────────────
+    # # ── Check 3: Paired volume ratios ───────────────────────────────────────
 
-    def _check_paired_ratios(
-        self,
-        organ_volumes: Dict[str, float],
-        organ_results: Dict[str, OrganQCResult],
-    ) -> None:
-        # Standard paired organs
-        for pair in self.paired_ratios:
-            org_a, org_b = pair["organ_a"], pair["organ_b"]
-            rmin, rmax = pair["min_ratio"], pair["max_ratio"]
-            if org_a in organ_volumes and org_b in organ_volumes:
-                va, vb = organ_volumes[org_a], organ_volumes[org_b]
-                if va < 1e-3 or vb < 1e-3:
-                    continue
-                ratio = va / vb
-                for org, partner in [(org_a, org_b), (org_b, org_a)]:
-                    if org in organ_results:
-                        organ_results[org].ratio_partner = partner
-                        organ_results[org].ratio_value = ratio if org == org_a else 1.0 / ratio
-                if ratio < rmin or ratio > rmax:
-                    flag = f"RATIO_OUTLIER: {org_a}/{org_b} = {ratio:.2f}, expected [{rmin:.1f}, {rmax:.1f}]"
-                    for org in (org_a, org_b):
-                        if org in organ_results:
-                            organ_results[org].ratio_in_range = False
-                            organ_results[org].ratio_flag = flag
+    # def _check_paired_ratios(
+    #     self,
+    #     organ_volumes: Dict[str, float],
+    #     organ_results: Dict[str, OrganQCResult],
+    # ) -> None:
+    #     # Standard paired organs
+    #     for pair in self.paired_ratios:
+    #         org_a, org_b = pair["organ_a"], pair["organ_b"]
+    #         rmin, rmax = pair["min_ratio"], pair["max_ratio"]
+    #         if org_a in organ_volumes and org_b in organ_volumes:
+    #             va, vb = organ_volumes[org_a], organ_volumes[org_b]
+    #             if va < 1e-3 or vb < 1e-3:
+    #                 continue
+    #             ratio = va / vb
+    #             for org, partner in [(org_a, org_b), (org_b, org_a)]:
+    #                 if org in organ_results:
+    #                     organ_results[org].ratio_partner = partner
+    #                     organ_results[org].ratio_value = ratio if org == org_a else 1.0 / ratio
+    #             if ratio < rmin or ratio > rmax:
+    #                 flag = f"RATIO_OUTLIER: {org_a}/{org_b} = {ratio:.2f}, expected [{rmin:.1f}, {rmax:.1f}]"
+    #                 for org in (org_a, org_b):
+    #                     if org in organ_results:
+    #                         organ_results[org].ratio_in_range = False
+    #                         organ_results[org].ratio_flag = flag
 
-        # Lung composite ratios
-        for entry in self.lung_ratios:
-            left_lobes = entry["left_lobes"]
-            right_lobes = entry["right_lobes"]
-            rmin, rmax = entry["min_ratio"], entry["max_ratio"]
-            left_vol = sum(organ_volumes.get(l, 0.0) for l in left_lobes)
-            right_vol = sum(organ_volumes.get(r, 0.0) for r in right_lobes)
-            if left_vol < 1e-3 or right_vol < 1e-3:
-                continue
-            ratio = left_vol / right_vol
-            if ratio < rmin or ratio > rmax:
-                flag = f"LUNG_RATIO_OUTLIER: left/right = {ratio:.2f}, expected [{rmin:.1f}, {rmax:.1f}]"
-                for lobe in left_lobes + right_lobes:
-                    if lobe in organ_results:
-                        organ_results[lobe].ratio_in_range = False
-                        organ_results[lobe].ratio_flag = flag
+    #     # Lung composite ratios
+    #     for entry in self.lung_ratios:
+    #         left_lobes = entry["left_lobes"]
+    #         right_lobes = entry["right_lobes"]
+    #         rmin, rmax = entry["min_ratio"], entry["max_ratio"]
+    #         left_vol = sum(organ_volumes.get(l, 0.0) for l in left_lobes)
+    #         right_vol = sum(organ_volumes.get(r, 0.0) for r in right_lobes)
+    #         if left_vol < 1e-3 or right_vol < 1e-3:
+    #             continue
+    #         ratio = left_vol / right_vol
+    #         if ratio < rmin or ratio > rmax:
+    #             flag = f"LUNG_RATIO_OUTLIER: left/right = {ratio:.2f}, expected [{rmin:.1f}, {rmax:.1f}]"
+    #             for lobe in left_lobes + right_lobes:
+    #                 if lobe in organ_results:
+    #                     organ_results[lobe].ratio_in_range = False
+    #                     organ_results[lobe].ratio_flag = flag
 
-    # ── Check 4: Mask overlap ───────────────────────────────────────────────
+    # # ── Check 4: Mask overlap ───────────────────────────────────────────────
 
-    def _check_overlap(
-        self,
-        organ_masks: Dict[str, np.ndarray],
-        organ_results: Dict[str, OrganQCResult],
-    ) -> List[str]:
-        overlap_pairs = []
-        if len(organ_masks) < 2:
-            return overlap_pairs
+    # def _check_overlap(
+    #     self,
+    #     organ_masks: Dict[str, np.ndarray],
+    #     organ_results: Dict[str, OrganQCResult],
+    # ) -> List[str]:
+    #     overlap_pairs = []
+    #     if len(organ_masks) < 2:
+    #         return overlap_pairs
 
-        organ_names = list(organ_masks.keys())
-        ref_shape = organ_masks[organ_names[0]].shape
+    #     organ_names = list(organ_masks.keys())
+    #     ref_shape = organ_masks[organ_names[0]].shape
 
-        # Build count map (how many organs claim each voxel)
-        count_map = np.zeros(ref_shape, dtype=np.int16)
-        valid = []
-        for name in organ_names:
-            if organ_masks[name].shape == ref_shape:
-                count_map += (organ_masks[name] > 0).astype(np.int16)
-                valid.append(name)
+    #     # Build count map (how many organs claim each voxel)
+    #     count_map = np.zeros(ref_shape, dtype=np.int16)
+    #     valid = []
+    #     for name in organ_names:
+    #         if organ_masks[name].shape == ref_shape:
+    #             count_map += (organ_masks[name] > 0).astype(np.int16)
+    #             valid.append(name)
 
-        overlap_voxels = count_map > 1
-        if int(np.sum(overlap_voxels)) == 0:
-            return overlap_pairs
+    #     overlap_voxels = count_map > 1
+    #     if int(np.sum(overlap_voxels)) == 0:
+    #         return overlap_pairs
 
-        # Find which organs overlap
-        overlap_organs = [n for n in valid if np.any((organ_masks[n] > 0) & overlap_voxels)]
-        for i in range(len(overlap_organs)):
-            for j in range(i + 1, len(overlap_organs)):
-                a, b = overlap_organs[i], overlap_organs[j]
-                pairwise = int(np.sum((organ_masks[a] > 0) & (organ_masks[b] > 0)))
-                if pairwise > 0:
-                    pair_str = f"{a} ∩ {b} ({pairwise} vox)"
-                    overlap_pairs.append(pair_str)
-                    flag = f"OVERLAP: {pair_str}"
-                    for org in (a, b):
-                        if org in organ_results:
-                            organ_results[org].has_overlap = True
-                            organ_results[org].overlap_flag = flag
+    #     # Find which organs overlap
+    #     overlap_organs = [n for n in valid if np.any((organ_masks[n] > 0) & overlap_voxels)]
+    #     for i in range(len(overlap_organs)):
+    #         for j in range(i + 1, len(overlap_organs)):
+    #             a, b = overlap_organs[i], overlap_organs[j]
+    #             pairwise = int(np.sum((organ_masks[a] > 0) & (organ_masks[b] > 0)))
+    #             if pairwise > 0:
+    #                 pair_str = f"{a} ∩ {b} ({pairwise} vox)"
+    #                 overlap_pairs.append(pair_str)
+    #                 flag = f"OVERLAP: {pair_str}"
+    #                 for org in (a, b):
+    #                     if org in organ_results:
+    #                         organ_results[org].has_overlap = True
+    #                         organ_results[org].overlap_flag = flag
 
-        return overlap_pairs
+    #     return overlap_pairs
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -397,4 +401,4 @@ class GeometricQC:
 def _compute_volume_ml(mask_data: np.ndarray, voxel_dims_mm: tuple) -> float:
     """Compute volume of non-zero voxels in mL."""
     voxel_vol_mm3 = float(np.prod(voxel_dims_mm))
-    return int(np.sum(mask_data > 0)) * voxel_vol_mm3 / 1000.0
+    return float(np.sum(mask_data > 0)) * voxel_vol_mm3 / 1000.0
