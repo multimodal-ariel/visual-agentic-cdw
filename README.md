@@ -57,9 +57,7 @@ conda run -n cdw_radiomics python tests/run_e2e.py --mode string  # planner-only
 conda run -n cdw_radiomics python tests/run_e2e.py --mode image   # full on dummy
 
 # 5) Batch (production example)
-python -m orchestrator.batch_runner \
-	--filelist /data/.../ct_axial_cases.json \
-	--gpus 0,1 --workers 2
+/home/soumitri/env/miniconda3/bin/conda run -n cdw_llm python -m orchestrator.batch_runner --filelist /data/soumitri/test_pipeline_new_2_llm/filelist_testing_remapped.json --gpus 0 --skip-radiomics --consensus
 ```
 
 Full server bring-up (multi-GPU) is summarized in `docs/deployment.md`.
