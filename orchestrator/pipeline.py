@@ -44,6 +44,7 @@ import importlib
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -55,6 +56,7 @@ from config.constants import (
     LOG_DIR,
     TOOL_OUTPUT_DIRS,
 )
+from orchestrator.case_id import derive_case_id
 from tools.base_tool import BaseSegmentationTool, ToolInput, ToolOutput
 from processing.postprocessing import keep_largest_component, fill_holes
 
@@ -64,6 +66,13 @@ import shutil
 import nibabel as nib
 import numpy as np
 from scipy.ndimage import distance_transform_edt
+
+# All NIfTI writes from the orchestrator (postprocessed masks, multilabel
+# splits) use gzip level 1 — measured ~2x faster than level 6 on organ-sized
+# masks with negligible disk impact. nibabel 5.4+ already defaults to 1, but
+# older versions in the production conda envs may default to 9; force it
+# defensively so behavior is identical regardless of env.
+nib.openers.Opener.default_compresslevel = 1
 
 # Module-level cache for extract_pyradiomics to survive sys.modules swap
 _EXTRACT_PYRADIOMICS = None
@@ -173,10 +182,12 @@ class CasePipeline:
         postprocess: bool = True,
         skip_radiomics: bool = False,
         consensus: bool = True,
+        tools_whitelist: Optional[List[str]] = None,
+        tool_timeout_s: Optional[float] = None,
     ):
         # Two-model routing: planner (Qwen3-8B) + clinical (MedGemma-27B)
         # Falls back to single `llm` if specific models not provided
-        self.planner_llm = planner_llm 
+        self.planner_llm = planner_llm
         self.clinical_llm = clinical_llm
         self.llm = llm  # legacy compat
         self.device = device
@@ -185,6 +196,11 @@ class CasePipeline:
         self.postprocess = postprocess
         self.skip_radiomics = skip_radiomics
         self.consensus = consensus
+        # Optional restriction on which tools to run. None = no restriction
+        # (registry/anatomy/modality filters still apply).
+        self.tools_whitelist = set(tools_whitelist) if tools_whitelist else None
+        # Per-tool subprocess timeout in seconds (None = no timeout).
+        self.tool_timeout_s = tool_timeout_s
 
         if not self.no_llm and self.planner_llm is None:
             logger.warning("CasePipeline no_llm=False but planner_llm is None.")
@@ -211,7 +227,7 @@ class CasePipeline:
             CaseResult with all outputs, timing, and errors.
         """
         t0 = time.time()
-        case_id = Path(case_path).name
+        case_id = derive_case_id(case_path)
         result = CaseResult(case_id=case_id, case_path=case_path)
 
         try:
@@ -234,25 +250,44 @@ class CasePipeline:
                 result.metadata = self._step_metadata(case_path, image_path, result)
             if not result.is_diagnostic:
                 result.status = "skipped"
-                result.warnings.append("Non-diagnostic scan — skipped")
+                result.warnings.append(
+                    result.metadata.get("skip_reason", "Non-diagnostic scan — skipped")
+                )
+                return result
+
+            # Step 1b: shape gate — registered tools are all 3D; a 2D/degenerate
+            # NIfTI will crash them. Reads only the header (fast, no data load).
+            if not self._step_shape_check(image_path, result):
+                result.status = "skipped"
+                result.warnings.append(
+                    result.metadata.get("skip_reason", "Volume is not 3D — skipped")
+                )
                 return result
 
             # Step 2: Tool selection
             result.selected_tools = self._step_tool_selection(result.metadata, result)
 
-            print(result.selected_tools)
+            # If selection returned nothing the case would silently complete
+            # with no masks. That's a configuration error (typo in --tools,
+            # over-restrictive anatomy filter, or all compatible tools deferred);
+            # fail loudly rather than mark it completed.
+            if not result.selected_tools:
+                result.status = "failed"
+                result.error = (
+                    f"No compatible tools for modality={result.metadata.get('modality')!r}, "
+                    f"anatomy={result.metadata.get('anatomy')!r}"
+                    + (f" (whitelist={sorted(self.tools_whitelist)})" if self.tools_whitelist else "")
+                )
+                logger.warning("[%s] %s", result.case_id, result.error)
+                return result
 
             # Step 3: Organ list generation
             result.expected_organs = self._step_organ_list(result.metadata, result)
-
-            print(result.expected_organs)
 
             # Step 4: Segmentation (per tool)
             seg_dirs = self._step_segmentation(
                 case_path, image_path, result.metadata, result
             )
-
-            print(seg_dirs)
 
             '''[May-11-2026: Disabling this super complicated QC checking. Radiomics will be done offline separately.]'''
 
@@ -281,14 +316,14 @@ class CasePipeline:
             result.status = "failed"
             result.error = str(e)
             logger.exception("[%s] Pipeline failed: %s", case_id, e)
-
-        result.total_time_s = round(time.time() - t0, 2)
-
-        # save QC report
-        # self._write_case_qc_report(result)
-
-        # Save per-case log
-        self._save_case_log(result)
+        finally:
+            # Run bookkeeping regardless of early returns inside the try block
+            # (skipped non-diagnostic, 2D shape gate, empty tool list, etc.) so
+            # every case lands a per-case log and an accurate total_time_s.
+            result.total_time_s = round(time.time() - t0, 2)
+            # save QC report
+            # self._write_case_qc_report(result)
+            self._save_case_log(result)
 
         return result
 
@@ -314,40 +349,287 @@ class CasePipeline:
                      result.is_diagnostic)
         return meta
 
+    # ── Step 1b: shape gate ─────────────────────────────────────────────────
+    # Min spatial size we'll accept on any axis. A NIfTI saved with shape
+    # (X, Y, 1) is a single 2D slice; tools (TotalSegmentator/MRSeg/VISTA3D/
+    # VoxTell/TextMedSeg3D) require true 3D volumes and crash or return
+    # garbage on these. We also require >=4 slices because some nnU-Net
+    # patches are 3-thick and a 2-3 slice volume will still error.
+    _MIN_3D_AXIS = 4
+
+    def _step_shape_check(self, image_path: str, result: CaseResult) -> bool:
+        """Reject anything that isn't a proper 3D volume.
+
+        Reads only the NIfTI header (mmap'd, no data load — microseconds).
+        Records the discovered shape on ``result.metadata['shape']`` for
+        downstream consumers, and on rejection sets
+        ``result.metadata['skip_reason']`` and ``result.is_diagnostic=False``.
+
+        Returns True if the volume looks 3D enough to feed to the tools.
+        """
+        t0 = time.time()
+        shape = ()
+        try:
+            import nibabel as nib
+            img = nib.load(image_path, mmap=True)
+            # Use first 3 spatial dims; ignore time/channel dims if present (4D NIfTI).
+            shape = tuple(int(s) for s in img.shape[:3])
+        except Exception as e:
+            result.warnings.append(f"Header read failed; skipping case: {e}")
+            result.metadata["skip_reason"] = f"NIfTI header unreadable: {e}"
+            result.is_diagnostic = False
+            result.step_times["shape_check"] = round(time.time() - t0, 2)
+            return False
+
+        result.metadata["shape"] = list(shape)
+        is_3d = len(shape) >= 3 and all(s >= self._MIN_3D_AXIS for s in shape)
+
+        if not is_3d:
+            reason = (
+                f"Volume is not 3D (shape={shape}; need >=3 axes, each >="
+                f"{self._MIN_3D_AXIS} voxels)"
+            )
+            result.metadata["skip_reason"] = reason
+            result.is_diagnostic = False
+            logger.info("[%s] %s", result.case_id, reason)
+
+        result.step_times["shape_check"] = round(time.time() - t0, 2)
+        return is_3d
+
+    # Modality tokens — matched as whole sub-tokens of any path component.
+    # Sub-tokens are obtained by splitting on any non-alphanumeric character,
+    # so `CT_ABD_PELVIS_W_O` yields {CT, ABD, PELVIS, W, O} and `BRAIN_MRI`
+    # yields {BRAIN, MRI}. Walking up from the leaf catches the common layout
+    # where modality lives in a study folder and the leaf is a series name.
+    _MR_TOKENS = {"MR", "MRI", "MRA", "MRV", "MRCP", "MRE", "MRS"}
+    # MRI pulse-sequence tokens that imply MRI when they appear in a series
+    # name (T1/T2/FLAIR/DWI/etc.). Keep this list specific to avoid false
+    # positives — e.g. "T1" not "T".
+    _MRI_SEQUENCE_TOKENS = {
+        "T1", "T2", "T2STAR", "FLAIR", "STIR", "DWI", "ADC", "GRE", "SWI",
+        "MPRAGE", "FIESTA", "SSFP", "TRUFI", "HASTE", "PD", "DIXON",
+    }
+    _CT_TOKENS = {"CT", "CTA", "CTU", "CTV", "NCCT", "CECT"}
+    _PET_TOKENS = {"PET"}  # bare "PT" omitted: collides with patient IDs (PT0001, PT_001)
+    _NON_3D_TOKENS = {"DX", "CR", "MG", "FL", "XA", "NM", "US", "OT", "RF"}
+    # Exact-token rejections — sub-token must equal one of these. Short or
+    # collision-prone keywords go here. (VR is short enough that 'contains'
+    # would over-fire on things like CINEVR; we rely on the VRT contains rule
+    # to catch the variants we've actually seen.)
+    _NON_DIAGNOSTIC_EXACT = frozenset({"VR"})
+    # Substring-within-token rejections — any sub-token that *contains* one
+    # of these is non-diagnostic. Used for distinctive keywords with
+    # morphological variants we'd otherwise miss:
+    #   REFORMAT    → REFORMAT, REFORMATTED, REFORMATS
+    #   SCOUT       → SCOUT, AAHSCOUT, SCOUT_AX
+    #   SECONDARY   → SECONDARY_CAPTURE, SECONDARYCAPTURE
+    #   VRT         → VRT, VRT_RANGE, VRT_OBLIQUE
+    #   LOCALIZER   → LOCALIZER, LOCALIZER_AX
+    #   PROJECTION  → PROJECTION_IMAGES (CT scout projections)
+    _NON_DIAGNOSTIC_CONTAINS = (
+        "LOCALIZER", "SCOUT", "REFORMAT", "SECONDARY",
+        "TOPOGRAM", "VRT", "VOLUMERENDER", "PROJECTION",
+    )
+    # Regex rules — applied to each sub-token. Used for short keywords where
+    # a plain substring match would over-fire on unrelated tokens.
+    #   MIP must be followed by 'S' (plural), a digit, or end-of-token.
+    #   Catches: MIP, MIPS, MIP_AX, AXIALMIP, AXIALMIPS, AXIALMIP2,
+    #            5AXIALMIPSUPINEINSPIRATION, 5XCORONALMIP2.
+    #   Spares:  HEMIPELVIS, HEMIPLEGIA, anything where MIP is followed by a
+    #            letter other than S.
+    _NON_DIAGNOSTIC_PATTERNS = (
+        ("MIP", re.compile(r"MIP(?:S|\d|$)")),
+    )
+    # MPR variants are handled separately: prefix-or-suffix match with an
+    # explicit exempt list so MPRAGE (a valid MRI T1 sequence) doesn't get
+    # caught by the same rule that catches MPR / MPR_COR / MPRSERIES / DMPR.
+    _MPR_EXEMPT_TOKENS = frozenset({"MPRAGE"})
+    _ANATOMY_REGIONS = ("ABDOMEN_PELVIS", "CHEST_ABDOMEN_PELVIS", "ABD", "CHEST",
+                        "HEAD", "PELVIS", "SPINE", "NECK", "CARDIAC", "BRAIN")
+    _ANATOMY_NORM = {
+        "ABD": "abdomen", "CHEST": "chest", "HEAD": "head",
+        "PELVIS": "pelvis", "SPINE": "spine", "NECK": "neck",
+        "ABDOMEN_PELVIS": "abdomen_pelvis",
+        "CHEST_ABDOMEN_PELVIS": "chest_abdomen_pelvis",
+        "CARDIAC": "cardiac",
+        "BRAIN": "head",
+        "UNKNOWN": "unknown",
+    }
+    _DATE_RE = re.compile(
+        r"^("
+        r"\d{8}|"                # YYYYMMDD
+        r"\d{8}_\d{6}|"          # YYYYMMDD_HHMMSS
+        r"\d{4}-\d{2}-\d{2}.*|"  # YYYY-MM-DD ...
+        r"\d{4}_\d{2}_\d{2}.*"   # YYYY_MM_DD ...
+        r")$"
+    )
+    _SUBTOKEN_SPLIT_RE = re.compile(r"[^A-Z0-9]+")
+
+    @classmethod
+    def _subtokens(cls, comp: str) -> list:
+        """Split a path component into uppercase alnum sub-tokens.
+
+        'CT_ABD_PELVIS_W_O' → ['CT', 'ABD', 'PELVIS', 'W', 'O']
+        'BRAIN-MRI(Ax)'     → ['BRAIN', 'MRI', 'AX']
+        """
+        return [t for t in cls._SUBTOKEN_SPLIT_RE.split(comp.upper()) if t]
+
+    @classmethod
+    def _modality_from_component(cls, comp: str):
+        """Inspect a component's sub-tokens and return ('CT'|'MRI'|'PET_CT'|None,
+        non_3d_token_or_None). 3D modality wins over non-3D within the same
+        component."""
+        non_3d = None
+        for tok in cls._subtokens(comp):
+            if tok in cls._MR_TOKENS or tok in cls._MRI_SEQUENCE_TOKENS:
+                return "MRI", None
+            if tok in cls._CT_TOKENS:
+                return "CT", None
+            if tok in cls._PET_TOKENS:
+                return "PET_CT", None
+            if tok in cls._NON_3D_TOKENS and non_3d is None:
+                non_3d = tok
+        return None, non_3d
+
+    @classmethod
+    def _non_diagnostic_match(cls, tokens) -> Optional[str]:
+        """Return the matched non-diagnostic keyword, or None.
+
+        Four-tier match:
+          - _NON_DIAGNOSTIC_EXACT    : sub-token equals keyword.
+          - _NON_DIAGNOSTIC_CONTAINS : keyword is a substring of sub-token.
+          - _NON_DIAGNOSTIC_PATTERNS : regex match anywhere in sub-token
+                                       (tighter than 'contains'; used for
+                                       short keywords like MIP).
+          - MPR prefix/suffix        : sub-token starts or ends with 'MPR',
+                                       with explicit exemption for MPRAGE.
+        """
+        for tok in tokens:
+            if tok in cls._NON_DIAGNOSTIC_EXACT:
+                return tok
+            for kw in cls._NON_DIAGNOSTIC_CONTAINS:
+                if kw in tok:
+                    return kw
+            for kw, pat in cls._NON_DIAGNOSTIC_PATTERNS:
+                if pat.search(tok):
+                    return kw
+            if tok not in cls._MPR_EXEMPT_TOKENS and (
+                tok.startswith("MPR") or tok.endswith("MPR")
+            ):
+                return "MPR"
+        return None
+
+    @classmethod
+    def _anatomy_from_component(cls, comp: str) -> str:
+        """Return matching anatomy region or 'UNKNOWN'."""
+        cu = comp.upper()
+        if "ABD" in cu and "PELVIS" in cu:
+            return "ABDOMEN_PELVIS"
+        if "CHEST" in cu and "ABD" in cu:
+            return "CHEST_ABDOMEN_PELVIS"
+        for region in cls._ANATOMY_REGIONS:
+            if region in cu:
+                return region
+        return "UNKNOWN"
+
     def _metadata_from_path(self, case_path: str) -> dict:
-        """Heuristic metadata from directory path (no LLM)."""
-        path_upper = case_path.upper()
-        modality = "CT"
-        if "/MR_" in path_upper or "/MRI_" in path_upper:
-            modality = "MRI"
-        elif "/PT_" in path_upper or "/PET_" in path_upper:
-            modality = "PET_CT"
+        """Heuristic metadata from directory path (no LLM).
 
+        Strategy:
+          1. Reject the case if the *series* basename is a non-diagnostic
+             reformat (LOCALIZER, SCOUT, MIP, ...).
+          2. Detect a date component in the path. If found, treat the
+             component immediately AFTER the date as the study folder and
+             extract modality/anatomy from it.
+          3. If the study folder doesn't carry modality info (or no date is
+             found), walk every path component from leaf to root and split
+             into sub-tokens (CT_ABD_PELVIS → CT,ABD,PELVIS), accepting the
+             first 3D-modality hit.
+          4. Unknown / 2D / non-diagnostic modalities return
+             ``is_diagnostic=False`` so the case is skipped rather than
+             misprocessed as CT (the old default).
+        """
+        parts = [p for p in str(case_path).rstrip("/").split("/") if p]
+        if not parts:
+            return {
+                "modality": "UNKNOWN", "anatomy": "unknown",
+                "is_diagnostic": False, "source": "path_heuristic",
+                "skip_reason": "empty path",
+            }
+
+        leaf = parts[-1].upper()
+
+        # Step 1: reject non-diagnostic reformats by series basename.
+        # Hybrid match (see class-level docstrings on the two token sets):
+        #   - Exact-token for short / collision-prone keywords (MPR vs MPRAGE).
+        #   - Substring-within-token for distinctive keywords whose plurals,
+        #     prefixes, or concatenations would otherwise slip through
+        #     (REFORMATTED, AAHSCOUT, SECONDARYCAPTURE, VRT_RANGE, ...).
+        leaf_tokens = self._subtokens(leaf)
+        match = self._non_diagnostic_match(leaf_tokens)
+        if match is not None:
+            return {
+                "modality": "UNKNOWN", "anatomy": "unknown",
+                "is_diagnostic": False, "source": "path_heuristic",
+                "skip_reason": f"Non-diagnostic series keyword '{match}' in '{leaf}'",
+            }
+
+        # Step 2: locate a date component, identify the study folder
+        date_idx = next(
+            (i for i, p in enumerate(parts) if self._DATE_RE.match(p)),
+            -1,
+        )
+        modality = None
+        non_3d_token = None
         anatomy = "UNKNOWN"
-        for region in ["ABD", "CHEST", "HEAD", "PELVIS", "SPINE", "NECK", "CARDIAC"]:
-            if region in path_upper:
-                anatomy = region
-                break
-        if "ABD" in path_upper and "PELVIS" in path_upper:
-            anatomy = "ABDOMEN_PELVIS"
-        elif "CHEST" in path_upper and "ABD" in path_upper:
-            anatomy = "CHEST_ABDOMEN_PELVIS"
 
-        # Normalize to organ_reference.json keys
-        _ANATOMY_NORM = {
-            "ABD": "abdomen", "CHEST": "chest", "HEAD": "head",
-            "PELVIS": "pelvis", "SPINE": "spine", "NECK": "neck",
-            "ABDOMEN_PELVIS": "abdomen_pelvis",
-            "CHEST_ABDOMEN_PELVIS": "chest_abdomen_pelvis",
-            "CARDIAC": "cardiac"
-        }
-        anatomy = _ANATOMY_NORM.get(anatomy, anatomy)
+        # Pick the candidate "study folder": the component right after the
+        # date if any, otherwise the parent of the leaf.
+        if 0 <= date_idx < len(parts) - 1:
+            study_idx = date_idx + 1
+        else:
+            study_idx = len(parts) - 2 if len(parts) >= 2 else -1
+
+        if study_idx >= 0:
+            modality, non_3d_token = self._modality_from_component(parts[study_idx])
+            anatomy = self._anatomy_from_component(parts[study_idx])
+
+        # Step 3: fall back — scan all components from leaf to root
+        if modality is None:
+            for comp in reversed(parts):
+                mod, nd = self._modality_from_component(comp)
+                if mod is not None:
+                    modality = mod
+                    break
+                if nd is not None and non_3d_token is None:
+                    non_3d_token = nd
+
+        if anatomy == "UNKNOWN":
+            for comp in reversed(parts):
+                a = self._anatomy_from_component(comp)
+                if a != "UNKNOWN":
+                    anatomy = a
+                    break
+
+        anatomy_norm = self._ANATOMY_NORM.get(anatomy, anatomy.lower())
+
+        # Step 4: classify the outcome
+        if modality is None:
+            if non_3d_token is not None:
+                return {
+                    "modality": non_3d_token, "anatomy": anatomy_norm,
+                    "is_diagnostic": False, "source": "path_heuristic",
+                    "skip_reason": f"Non-3D / non-diagnostic modality token '{non_3d_token}'",
+                }
+            return {
+                "modality": "UNKNOWN", "anatomy": anatomy_norm,
+                "is_diagnostic": False, "source": "path_heuristic",
+                "skip_reason": f"Could not infer modality from path components",
+            }
 
         return {
-            "modality": modality,
-            "anatomy": anatomy,
-            "is_diagnostic": True,
-            "source": "path_heuristic",
+            "modality": modality, "anatomy": anatomy_norm,
+            "is_diagnostic": True, "source": "path_heuristic",
         }
 
     # ── Step 2: Tool selection ──────────────────────────────────────────────
@@ -369,8 +651,11 @@ class CasePipeline:
         """
         t0 = time.time()
 
-        # Base: all registry-compatible tools (always)
-        tools = self._all_compatible_tools(metadata.get("modality", "CT"))
+        # Base: registry tools compatible with this case's modality + anatomy.
+        tools = self._all_compatible_tools(
+            metadata.get("modality", "CT"),
+            metadata.get("anatomy", "all"),
+        )
 
         # LLM refinement: get targeted organ prompts for text-promptable tools
         targeted_organs: Dict[str, List[str]] = {}
@@ -392,13 +677,21 @@ class CasePipeline:
         logger.info("[%s] Selected tools (%d): %s", result.case_id, len(tools), tools)
         return tools
 
-    def _all_compatible_tools(self, modality: str) -> List[str]:
+    def _all_compatible_tools(self, modality: str, anatomy: str = "all") -> List[str]:
         """
-        Return ALL tools from the registry that support the given modality.
-        Maximum coverage — the original design principle.
+        Return registry tools compatible with the case's modality AND anatomy.
+
+        - Skips tools flagged ``deferred``.
+        - Modality must be in ``supported_modalities`` (or empty list = wildcard).
+        - Anatomy must be in ``supported_anatomies`` or ``["all"]``. Pass
+          anatomy="all" to disable the anatomy filter (legacy behavior).
+        - If ``self.tools_whitelist`` is set, intersect with it.
         """
         if self._tool_registry is None:
             self._tool_registry = _load_tool_registry()
+
+        modality_u = modality.upper()
+        anatomy_l = anatomy.lower() if anatomy else "all"
 
         tools = []
         for category in ("fixed_class_tools", "text_promptable_tools", "label_prompted_tools"):
@@ -406,9 +699,22 @@ class CasePipeline:
                 name = entry.get("name", "")
                 if entry.get("deferred"):
                     continue
-                supported = [m.upper() for m in entry.get("supported_modalities", [])]
-                if not supported or modality.upper() in supported:
-                    tools.append(name)
+                if self.tools_whitelist is not None and name not in self.tools_whitelist:
+                    continue
+                supported_mods = [m.upper() for m in entry.get("supported_modalities", [])]
+                if supported_mods and modality_u not in supported_mods:
+                    continue
+                supported_ana = [a.lower() for a in entry.get("supported_anatomies", [])]
+                # Anatomy filter: skip only when both the tool and the case
+                # declare a specific anatomy and they disagree. Tools with
+                # "all" or no entry stay in. Cases with anatomy="all"/"unknown"
+                # also pass (we don't want unknown-anatomy heuristics to drop
+                # all tools).
+                if supported_ana and "all" not in supported_ana \
+                        and anatomy_l not in ("all", "unknown", "") \
+                        and anatomy_l not in supported_ana:
+                    continue
+                tools.append(name)
         return tools
 
     # ── Step 3: Organ list generation ───────────────────────────────────────
@@ -493,6 +799,7 @@ class CasePipeline:
                 target_organs=tool_organs,
                 output_dir=seg_dir,
                 device=self.device,
+                timeout_s=self.tool_timeout_s,
             )
 
             try:
@@ -534,43 +841,76 @@ class CasePipeline:
 
         return seg_dirs
 
+    # Per-case postprocessing thread pool size. scipy's label/binary_fill_holes
+    # release the GIL during their C inner loops, so threading delivers real
+    # parallelism. Capped low so that 8 batch workers × this don't oversubscribe
+    # the host (8 × 4 = 32 simultaneous mask jobs at peak).
+    _POSTPROC_THREADS = 4
+
+    # Filenames inside seg_dirs that are not per-organ masks and must not be
+    # passed through LCC/fill_holes (statistics JSON, multilabel sources, etc.).
+    _POSTPROC_SKIP_STEMS = frozenset({
+        "statistics", "combined", "multilabel", "multilabel_seg",
+        "image_nifti_seg", "segmentation", "manifest",
+    })
+
+    def _postprocess_one_mask(self, fpath: str) -> None:
+        """Load one organ mask, apply fill_holes + keep_largest_component,
+        save back only if the result differs. Swallows per-mask exceptions —
+        a single bad NIfTI must not abort the whole case."""
+        try:
+            nii = nib.load(fpath)
+            data = np.asarray(nii.dataobj, dtype=np.uint8)
+            if np.sum(data > 0) < 10:
+                return
+            cleaned = fill_holes(data)
+            cleaned = keep_largest_component(cleaned)
+            if not np.array_equal(data, cleaned):
+                out_nii = nib.Nifti1Image(cleaned, nii.affine, nii.header)
+                nib.save(out_nii, fpath)
+        except Exception:
+            pass  # don't fail the pipeline on postprocessing errors
+
     def _postprocess_masks(
         self, seg_dirs: Dict[str, str], result: CaseResult
     ) -> None:
-        """Apply LCC + hole fill to all masks in all seg_dirs."""
+        """Apply LCC + hole fill to all masks across all seg_dirs in parallel.
+
+        scipy.ndimage.label and binary_fill_holes release the GIL during their
+        C inner loops, so a ThreadPoolExecutor produces real parallel speedup
+        even though postprocessing is CPU-bound. Cap is _POSTPROC_THREADS to
+        keep the host from oversubscribing when many workers run at once.
+        """
+        from concurrent.futures import ThreadPoolExecutor
+
         t0 = time.time()
         try:
-            import nibabel as nib
-            import numpy as np
-
-            _SKIP_STEMS = {
-                    "statistics", "combined", "multilabel", "multilabel_seg",
-                    "image_nifti_seg", "segmentation", "manifest",
-                }
-
-            for tool_name, seg_dir in seg_dirs.items():
+            # Collect every mask path to process (flatten across all tools).
+            mask_paths = []
+            for seg_dir in seg_dirs.values():
                 if not os.path.isdir(seg_dir):
-                    continuE
-
+                    continue
                 for fname in os.listdir(seg_dir):
                     if not fname.endswith(".nii.gz"):
                         continue
-                    raw_name = fname.replace(".nii.gz", "")
-                    if raw_name in _SKIP_STEMS:
+                    if fname.replace(".nii.gz", "") in self._POSTPROC_SKIP_STEMS:
                         continue
-                    fpath = os.path.join(seg_dir, fname)
-                    try:
-                        nii = nib.load(fpath)
-                        data = np.asarray(nii.dataobj, dtype=np.uint8)
-                        if np.sum(data > 0) < 10:
-                            continue
-                        cleaned = fill_holes(data)
-                        cleaned = keep_largest_component(cleaned)
-                        if not np.array_equal(data, cleaned):
-                            out_nii = nib.Nifti1Image(cleaned, nii.affine, nii.header)
-                            nib.save(out_nii, fpath)
-                    except Exception:
-                        pass  # don't fail the pipeline on postprocessing errors
+                    mask_paths.append(os.path.join(seg_dir, fname))
+
+            if not mask_paths:
+                result.step_times["postprocess"] = round(time.time() - t0, 2)
+                return
+
+            # Single-threaded fast path when there's nothing to parallelize.
+            if len(mask_paths) == 1 or self._POSTPROC_THREADS <= 1:
+                for fpath in mask_paths:
+                    self._postprocess_one_mask(fpath)
+            else:
+                workers = min(self._POSTPROC_THREADS, len(mask_paths))
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    # list() forces draining; per-mask errors are already
+                    # caught inside _postprocess_one_mask.
+                    list(pool.map(self._postprocess_one_mask, mask_paths))
         except ImportError:
             result.warnings.append("Postprocessing skipped: nibabel/scipy not available")
         result.step_times["postprocess"] = round(time.time() - t0, 2)

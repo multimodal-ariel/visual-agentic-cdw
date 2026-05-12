@@ -180,7 +180,19 @@ class TextMedSeg3DTool(BaseSegmentationTool):
                 cmd += ["--text_encoder_checkpoint", self.text_encoder_checkpoint]
 
             try:
-                self._run_in_env(cmd, cwd=self.textmedseg_dir)
+                self._run_in_env(
+                    cmd,
+                    cwd=self.textmedseg_dir,
+                    gpu_id=self._parse_gpu_id(inp.device),
+                    timeout=inp.timeout_s,
+                )
+            except subprocess.TimeoutExpired:
+                return ToolOutput(
+                    tool_name=self.name, case_path=inp.case_path,
+                    seg_dir=output_dir, success=False,
+                    error=f"TextMedSeg3D timed out after {inp.timeout_s}s",
+                    runtime_seconds=time.time() - t0,
+                )
             except subprocess.CalledProcessError as e:
                 return ToolOutput(
                     tool_name=self.name, case_path=inp.case_path,

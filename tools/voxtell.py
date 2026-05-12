@@ -82,16 +82,13 @@ class VoxTellTool(BaseSegmentationTool):
 
         os.makedirs(output_dir, exist_ok=True)
 
-        # Device: "gpu:0" → device=cuda, gpu=0
-        if "gpu:" in inp.device:
-            device_str = "cuda"
-            gpu_id = inp.device.split(":")[1]
-        elif inp.device == "cpu":
+        # Physical GPU is pinned via CUDA_VISIBLE_DEVICES on the subprocess,
+        # so the tool only sees one GPU and addresses it as cuda:0.
+        physical_gpu_id = self._parse_gpu_id(inp.device)
+        if inp.device == "cpu":
             device_str = "cpu"
-            gpu_id = "0"
         else:
             device_str = "cuda"
-            gpu_id = "0"
 
         # voxtell-predict accepts all prompts in one call via -p arg (nargs='+')
         cmd = [
@@ -101,11 +98,18 @@ class VoxTellTool(BaseSegmentationTool):
             "-m", self.model_dir,
             "-p", *inp.target_organs,
             "--device", device_str,
-            "--gpu", gpu_id,
+            "--gpu", "0",
         ]
 
         try:
-            self._run_in_env(cmd)
+            self._run_in_env(cmd, gpu_id=physical_gpu_id, timeout=inp.timeout_s)
+        except subprocess.TimeoutExpired:
+            return ToolOutput(
+                tool_name=self.name, case_path=inp.case_path,
+                seg_dir=output_dir, success=False,
+                error=f"VoxTell timed out after {inp.timeout_s}s",
+                runtime_seconds=time.time() - t0,
+            )
         except subprocess.CalledProcessError as e:
             return ToolOutput(
                 tool_name=self.name, case_path=inp.case_path,

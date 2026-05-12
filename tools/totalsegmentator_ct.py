@@ -89,8 +89,11 @@ class TotalSegmentatorCTTool(BaseSegmentationTool):
                 runtime_seconds=time.time() - t0,
             )
 
-        # TotalSegmentator device format: "gpu:0" → "gpu" (it selects GPU automatically)
+        # TotalSegmentator device format: "gpu:0" → "gpu" (it selects GPU automatically).
+        # The physical GPU is pinned via CUDA_VISIBLE_DEVICES on the subprocess so
+        # parallel workers don't all default to cuda:0.
         device = "gpu" if inp.device.startswith("gpu") else inp.device
+        gpu_id = self._parse_gpu_id(inp.device)
 
         cmd = [
             "TotalSegmentator",
@@ -102,7 +105,14 @@ class TotalSegmentatorCTTool(BaseSegmentationTool):
         ]
 
         try:
-            self._run_in_env(cmd)
+            self._run_in_env(cmd, gpu_id=gpu_id, timeout=inp.timeout_s)
+        except subprocess.TimeoutExpired:
+            return ToolOutput(
+                tool_name=self.name, case_path=inp.case_path,
+                seg_dir=output_dir, success=False,
+                error=f"TotalSegmentator CT timed out after {inp.timeout_s}s",
+                runtime_seconds=time.time() - t0,
+            )
         except subprocess.CalledProcessError as e:
             return ToolOutput(
                 tool_name=self.name, case_path=inp.case_path,

@@ -156,27 +156,30 @@ class VIBESegmentatorTool(BaseSegmentationTool):
         # out_path is the multilabel output file (single NIfTI)
         multilabel_path = os.path.join(output_dir, "multilabel_seg.nii.gz")
 
-        # Device: "gpu:0" → ddevice="cuda", gpu=0
-        if "gpu:" in inp.device:
-            ddevice = "cuda"
-            gpu_id = inp.device.split(":")[1]
-        elif inp.device == "cpu":
-            ddevice = "cpu"
-            gpu_id = "0"
-        else:
-            ddevice = "cuda"
-            gpu_id = "0"
+        # Physical GPU is pinned via CUDA_VISIBLE_DEVICES on the subprocess,
+        # so the tool only sees one GPU and addresses it as cuda:0.
+        physical_gpu_id = self._parse_gpu_id(inp.device)
+        ddevice = "cpu" if inp.device == "cpu" else "cuda"
 
         cmd = [
             "python", script,
             "--img", inp.image_path,
             "--out_path", multilabel_path,
             "--ddevice", ddevice,
-            "--gpu", gpu_id,
+            "--gpu", "0",
         ]
 
         try:
-            self._run_in_env(cmd, cwd=self.vibeseg_dir)
+            self._run_in_env(
+                cmd, cwd=self.vibeseg_dir, gpu_id=physical_gpu_id, timeout=inp.timeout_s,
+            )
+        except subprocess.TimeoutExpired:
+            return ToolOutput(
+                tool_name=self.name, case_path=inp.case_path,
+                seg_dir=output_dir, success=False,
+                error=f"VIBESegmentator timed out after {inp.timeout_s}s",
+                runtime_seconds=time.time() - t0,
+            )
         except subprocess.CalledProcessError as e:
             return ToolOutput(
                 tool_name=self.name, case_path=inp.case_path,

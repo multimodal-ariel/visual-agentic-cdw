@@ -69,6 +69,7 @@ class TotalSegmentatorMRTool(BaseSegmentationTool):
             )
 
         device = "gpu" if inp.device.startswith("gpu") else inp.device
+        gpu_id = self._parse_gpu_id(inp.device)
 
         cmd = [
             "TotalSegmentator",
@@ -81,7 +82,14 @@ class TotalSegmentatorMRTool(BaseSegmentationTool):
         ]
 
         try:
-            self._run_in_env(cmd)
+            self._run_in_env(cmd, gpu_id=gpu_id, timeout=inp.timeout_s)
+        except subprocess.TimeoutExpired:
+            return ToolOutput(
+                tool_name=self.name, case_path=inp.case_path,
+                seg_dir=output_dir, success=False,
+                error=f"TotalSegmentator MR timed out after {inp.timeout_s}s",
+                runtime_seconds=time.time() - t0,
+            )
         except subprocess.CalledProcessError as e:
             return ToolOutput(
                 tool_name=self.name, case_path=inp.case_path,

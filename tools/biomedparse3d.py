@@ -102,7 +102,16 @@ class BiomedParse3DTool(BaseSegmentationTool):
         ]
 
         try:
-            self._run_in_env(cmd)
+            self._run_in_env(
+                cmd, gpu_id=self._parse_gpu_id(inp.device), timeout=inp.timeout_s,
+            )
+        except subprocess.TimeoutExpired:
+            return ToolOutput(
+                tool_name=self.name, case_path=inp.case_path,
+                seg_dir=output_dir, success=False,
+                error=f"BiomedParse3D timed out after {inp.timeout_s}s",
+                runtime_seconds=time.time() - t0,
+            )
         except subprocess.CalledProcessError as e:
             return ToolOutput(
                 tool_name=self.name, case_path=inp.case_path,

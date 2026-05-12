@@ -118,8 +118,10 @@ class MRISegmenterTool(BaseSegmentationTool):
         os.makedirs(output_dir, exist_ok=True)
         multilabel_path = os.path.join(output_dir, "segmentation.nii.gz")
 
-        # MRISegmenter device arg accepts {gpu, cpu, mps} only
+        # MRISegmenter device arg accepts {gpu, cpu, mps} only.
+        # The physical GPU is pinned via CUDA_VISIBLE_DEVICES on the subprocess.
         device_str = "gpu" if inp.device.startswith("gpu") else inp.device
+        gpu_id = self._parse_gpu_id(inp.device)
 
         cmd = [
             "MRISegmentator",
@@ -129,7 +131,14 @@ class MRISegmenterTool(BaseSegmentationTool):
         ]
 
         try:
-            self._run_in_env(cmd)
+            self._run_in_env(cmd, gpu_id=gpu_id, timeout=inp.timeout_s)
+        except subprocess.TimeoutExpired:
+            return ToolOutput(
+                tool_name=self.name, case_path=inp.case_path,
+                seg_dir=output_dir, success=False,
+                error=f"MRISegmenter timed out after {inp.timeout_s}s",
+                runtime_seconds=time.time() - t0,
+            )
         except subprocess.CalledProcessError as e:
             return ToolOutput(
                 tool_name=self.name, case_path=inp.case_path,

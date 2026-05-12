@@ -237,8 +237,12 @@ class VISTA3DTool(BaseSegmentationTool):
 
         os.makedirs(output_dir, exist_ok=True)
 
-        # Device string: "gpu:0" → "cuda:0"
-        device_str = inp.device.replace("gpu:", "cuda:") if "gpu:" in inp.device else inp.device
+        # Physical GPU is pinned via CUDA_VISIBLE_DEVICES on the subprocess,
+        # so the runner only sees one GPU and addresses it as cuda:0.
+        # run_vista3d.py passes args.device into torch.device(), which only
+        # accepts "cpu" / "cuda" / "cuda:N" — never the bare "gpu" string.
+        physical_gpu_id = self._parse_gpu_id(inp.device)
+        device_str = "cpu" if inp.device == "cpu" else "cuda:0"
 
         cmd = [
             "python", _RUNNER,
@@ -263,7 +267,14 @@ class VISTA3DTool(BaseSegmentationTool):
             cmd += ["--label_prompt"] + [str(i) for i in label_indices]
 
         try:
-            self._run_in_env(cmd)
+            self._run_in_env(cmd, gpu_id=physical_gpu_id, timeout=inp.timeout_s)
+        except subprocess.TimeoutExpired:
+            return ToolOutput(
+                tool_name=self.name, case_path=inp.case_path,
+                seg_dir=output_dir, success=False,
+                error=f"VISTA3D timed out after {inp.timeout_s}s",
+                runtime_seconds=time.time() - t0,
+            )
         except subprocess.CalledProcessError as e:
             return ToolOutput(
                 tool_name=self.name, case_path=inp.case_path,

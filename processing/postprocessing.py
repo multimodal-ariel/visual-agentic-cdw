@@ -33,16 +33,64 @@ Raw mask
 
 # currently, these are the only postprocessing functions being used
 
+def _nonzero_bbox(mask: np.ndarray):
+    """Return tuple of slices for the tight bbox of nonzero voxels, or None if empty.
+
+    Optimization helper for keep_largest_component / fill_holes — running scipy
+    over a tight crop is 10-50x faster than over a 512^3 volume, while
+    producing byte-identical results (since voxels outside the bbox are zero).
+    """
+    if mask.ndim == 3:
+        # Project along each axis: O(N) bool scans, only small 1D outputs.
+        # Avoid np.argwhere/flatnonzero which allocate int64 arrays sized to the
+        # number of nonzero voxels — pathological for dense masks.
+        nz_any = mask != 0
+        ax0_where = np.where(np.any(nz_any, axis=(1, 2)))[0]
+        if ax0_where.size == 0:
+            return None
+        ax1_where = np.where(np.any(nz_any, axis=(0, 2)))[0]
+        ax2_where = np.where(np.any(nz_any, axis=(0, 1)))[0]
+        i0, i1 = int(ax0_where[0]), int(ax0_where[-1])
+        j0, j1 = int(ax1_where[0]), int(ax1_where[-1])
+        k0, k1 = int(ax2_where[0]), int(ax2_where[-1])
+        return (slice(i0, i1 + 1), slice(j0, j1 + 1), slice(k0, k1 + 1))
+    coords = np.argwhere(mask)
+    if coords.size == 0:
+        return None
+    mn = coords.min(axis=0)
+    mx = coords.max(axis=0) + 1
+    return tuple(slice(int(mn[d]), int(mx[d])) for d in range(mask.ndim))
+
+
 def keep_largest_component(mask: np.ndarray) -> np.ndarray:
-    labeled, num_features = label(mask)
+    bbox = _nonzero_bbox(mask)
+    if bbox is None:
+        return mask
+    sub = mask[bbox]
+    labeled, num_features = label(sub)
     if num_features <= 1:
         return mask
     sizes = np.bincount(labeled.ravel())[1:]  # skip background
     largest = sizes.argmax() + 1
-    return (labeled == largest).astype(mask.dtype)
+    cleaned_sub = (labeled == largest).astype(mask.dtype)
+    out = np.zeros_like(mask)
+    out[bbox] = cleaned_sub
+    return out
+
 
 def fill_holes(mask: np.ndarray) -> np.ndarray:
-    return binary_fill_holes(mask).astype(mask.dtype)
+    bbox = _nonzero_bbox(mask)
+    if bbox is None:
+        return binary_fill_holes(mask).astype(mask.dtype)
+    sub = mask[bbox]
+    # Pad with 1 zero on all sides so scipy's "boundary = outside" semantics
+    # match the full-volume case (where surrounding zeros connect to outside).
+    padded = np.pad(sub, 1, mode="constant", constant_values=0)
+    filled = binary_fill_holes(padded)
+    inner = filled[tuple(slice(1, -1) for _ in range(mask.ndim))]
+    out = np.zeros_like(mask)
+    out[bbox] = inner.astype(mask.dtype)
+    return out
 
 
 # currently the remaining are not used, but can be plugged in for specific cases

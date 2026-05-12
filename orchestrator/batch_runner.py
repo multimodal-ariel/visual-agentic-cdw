@@ -30,7 +30,6 @@ import os
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from pathlib import Path
 from queue import Queue
 from typing import List, Optional
 
@@ -41,6 +40,7 @@ from config.constants import (
     SRC_PREFIX,
     DST_PREFIX,
 )
+from orchestrator.case_id import assert_unique_ids
 from orchestrator.case_tracker import CaseTracker
 from orchestrator.pipeline import CasePipeline, CaseResult
 
@@ -83,10 +83,25 @@ class BatchRunner:
         clinical_llm=None,
         llm=None,
         consensus: bool = False,
+        tools_whitelist: Optional[List[str]] = None,
+        tool_timeout_s: Optional[float] = None,
     ):
         self.filelist = filelist
         self.gpus = gpus or [0]
+        requested_workers = workers
         self.workers = min(workers, len(self.gpus))
+        if requested_workers < len(self.gpus):
+            logger.warning(
+                "Workers (%d) < GPUs (%d): %d GPU(s) will sit idle. "
+                "Pass --workers %d to use them all.",
+                requested_workers, len(self.gpus),
+                len(self.gpus) - requested_workers, len(self.gpus),
+            )
+        elif requested_workers > len(self.gpus):
+            logger.warning(
+                "Workers (%d) > GPUs (%d): capped to %d. Add more GPUs or lower --workers.",
+                requested_workers, len(self.gpus), self.workers,
+            )
         self.dry_run = dry_run
         self.no_llm = no_llm 
         self.skip_radiomics = skip_radiomics
@@ -94,6 +109,14 @@ class BatchRunner:
         self.clinical_llm = clinical_llm
         self.consensus = consensus
         self.llm = llm
+        self.tools_whitelist = tools_whitelist
+        self.tool_timeout_s = tool_timeout_s
+
+        # Validate --tools whitelist against the registry up front. A typo
+        # like 'TotalSegmentatorCT' (missing underscore) would otherwise
+        # silently make every diagnostic case complete with zero masks.
+        if self.tools_whitelist:
+            self._validate_tools_whitelist(self.tools_whitelist)
 
         if not self.no_llm and self.planner_llm is None:
             logger.warning("LLM enabled but planner_llm is None; metadata/tool-selection will fall back unless provided.")
@@ -133,12 +156,14 @@ class BatchRunner:
             logger.error("No cases found in %s", self.filelist)
             return {"error": "No cases found"}
 
-        # Register all cases (idempotent — completed cases stay completed)
-        case_ids = [Path(p).name for p in case_paths]
-        self.tracker.register_cases(case_ids)
+        # Derive stable, unique case IDs. Raises if filelist paths collide
+        # under the configured roots — better to fail fast than silently
+        # overwrite tracker entries (basenames collide ~3:1 in clinical data).
+        id_to_path = assert_unique_ids(case_paths)
+        case_ids = list(id_to_path.keys())
 
-        # Build work queue: pending + optionally failed
-        id_to_path = {Path(p).name: p for p in case_paths}
+        # Register all cases (idempotent — completed cases stay completed)
+        self.tracker.register_cases(case_ids)
         work = []
         for cid in case_ids:
             status = self.tracker.get_status(cid)
@@ -219,6 +244,8 @@ class BatchRunner:
                 no_llm=self.no_llm,
                 skip_radiomics=self.skip_radiomics,
                 consensus=self.consensus,
+                tools_whitelist=self.tools_whitelist,
+                tool_timeout_s=self.tool_timeout_s,
             )
 
             result = pipeline.run(case_path)
@@ -249,6 +276,34 @@ class BatchRunner:
             self._gpu_pool.put(device)
 
     # ── Filelist loading ────────────────────────────────────────────────────
+
+    def _validate_tools_whitelist(self, names: List[str]) -> None:
+        """Cross-check the --tools list against tool_registry.json.
+
+        Raises ValueError on the first unknown name. Fails fast at startup
+        rather than silently letting every case complete with zero masks
+        (a typo like 'TotalSegmentatorCT' for 'TotalSegmentator_CT' would
+        otherwise pass through unnoticed in a 24K-volume run).
+        """
+        reg_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "config", "tool_registry.json",
+        )
+        with open(reg_path) as f:
+            reg = json.load(f)
+        known = set()
+        for category in ("fixed_class_tools", "text_promptable_tools", "label_prompted_tools"):
+            for entry in reg.get(category, []):
+                if entry.get("deferred"):
+                    continue
+                if entry.get("name"):
+                    known.add(entry["name"])
+        unknown = [n for n in names if n not in known]
+        if unknown:
+            raise ValueError(
+                f"--tools contains unknown tool name(s): {unknown}. "
+                f"Available active tools: {sorted(known)}"
+            )
 
     def _load_filelist(self) -> List[str]:
         """Load case paths from a JSON filelist."""
@@ -346,6 +401,19 @@ if __name__ == "__main__":
     parser.add_argument("--skip-radiomics", action="store_true", help="Skip radiomics extraction")
     parser.add_argument("--consensus", action="store_true", help="Generate STAPLE consensus masks from multi-tool segmentations")
     parser.add_argument("--retry-failed", action="store_true", help="Re-process failed cases")
+    parser.add_argument(
+        "--tools",
+        default="",
+        help="Comma-separated tool names to restrict to (e.g. 'TotalSegmentator_CT,VISTA3D'). "
+             "Empty = use all registry-compatible tools.",
+    )
+    parser.add_argument(
+        "--tool-timeout",
+        type=float,
+        default=None,
+        help="Per-tool subprocess timeout in seconds (e.g. 600 = 10 min). "
+             "Default: no timeout. Tool will be marked failed on timeout.",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -365,6 +433,10 @@ if __name__ == "__main__":
         # clinical_llm = PlannerLLM.from_local("checkpoints/medgemma-27b-text-it")
         # clinical_llm.load()
 
+    tools_whitelist = (
+        [t.strip() for t in args.tools.split(",") if t.strip()] if args.tools else None
+    )
+
     runner = BatchRunner(
         filelist=args.filelist,
         state_file=args.state_file,
@@ -377,6 +449,8 @@ if __name__ == "__main__":
         consensus=args.consensus,
         planner_llm=planner_llm,
         clinical_llm=clinical_llm,
+        tools_whitelist=tools_whitelist,
+        tool_timeout_s=args.tool_timeout,
     )
 
     summary = runner.run(retry_failed=args.retry_failed)

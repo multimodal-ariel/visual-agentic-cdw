@@ -21,6 +21,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 import json
 import os
+import signal
 import subprocess
 import time
 
@@ -36,7 +37,8 @@ class ToolInput:
     anatomy: str             # head, chest, abdomen, abdomen_pelvis, etc.
     target_organs: List[str] # organs expected in this scan (from LLM planner)
     output_dir: str = ""     # where to write segmentations (tool-specific subdir)
-    device: str = "gpu:0"   # GPU device string
+    device: str = "gpu:0"    # GPU device string
+    timeout_s: Optional[float] = None  # subprocess wallclock bound (None = no limit)
 
 
 @dataclass
@@ -107,10 +109,32 @@ class BaseSegmentationTool(ABC):
           - Do NOT write manifest.json — _timed_run() handles that.
         """
 
+    @staticmethod
+    def _parse_gpu_id(device: str) -> Optional[int]:
+        """
+        Extract a single GPU index from a device string.
+
+        Accepts: "gpu:3", "cuda:3", "gpu", "cuda", "cpu", "" → returns 3 / None / None.
+        Used by run() to pass an explicit gpu_id to _run_in_env so subprocesses
+        run on the worker's assigned GPU rather than defaulting to cuda:0.
+        """
+        if not device:
+            return None
+        if ":" in device:
+            prefix, idx = device.split(":", 1)
+            if prefix.lower() in ("gpu", "cuda"):
+                try:
+                    return int(idx)
+                except ValueError:
+                    return None
+        return None
+
     def _run_in_env(
         self,
         cmd: List[str],
         cwd: Optional[str] = None,
+        gpu_id: Optional[int] = None,
+        timeout: Optional[float] = None,
     ) -> subprocess.CompletedProcess:
         """
         Run cmd inside this tool's conda environment via `conda run`.
@@ -120,6 +144,15 @@ class BaseSegmentationTool(ABC):
             ["python", "/path/runner.py", "--input", "...", "--output", "..."]
             ["torchrun", "--nproc_per_node=1", "inference.py", ...]
 
+        When gpu_id is provided, CUDA_VISIBLE_DEVICES is set on the subprocess
+        so that the tool sees only that physical GPU (as cuda:0 in its view).
+        This is required for multi-worker batch runs — without it, all workers
+        default to cuda:0 and contend on the same GPU.
+
+        ``timeout`` (seconds) bounds the subprocess wall time. On timeout the
+        child is killed and ``subprocess.TimeoutExpired`` is raised; callers
+        should catch it and return a ToolOutput(success=False, error=...).
+
         Raises subprocess.CalledProcessError on non-zero exit; callers should
         catch it and return a ToolOutput(success=False, error=...).
         """
@@ -127,14 +160,52 @@ class BaseSegmentationTool(ABC):
             raise RuntimeError(
                 f"{self.__class__.__name__}: conda_env class attribute is not set."
             )
+        env = os.environ.copy()
+        if gpu_id is not None:
+            env["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
         full_cmd = ["/home/soumitri/env/miniconda3/bin/conda", "run", "-n", self.conda_env] + cmd
-        return subprocess.run(
+
+        if timeout is None:
+            # No timeout requested → preserve original subprocess.run semantics.
+            return subprocess.run(
+                full_cmd,
+                check=True,
+                cwd=cwd,
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+        # Spawn in a new process group so we can SIGKILL the whole tree on
+        # timeout. subprocess.run(timeout=...) only signals the direct child
+        # (the `conda run` wrapper); the Python interpreter, nnU-Net dataloader
+        # workers, etc. are grandchildren and would survive — piling up GPU
+        # memory and zombie processes across 24K cases.
+        proc = subprocess.Popen(
             full_cmd,
-            check=True,
             cwd=cwd,
+            env=env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            start_new_session=True,
         )
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+            # Wait briefly for the OS to reap the group, then propagate.
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+            raise subprocess.TimeoutExpired(full_cmd, timeout) from None
+
+        if proc.returncode != 0:
+            raise subprocess.CalledProcessError(proc.returncode, full_cmd)
+        return subprocess.CompletedProcess(full_cmd, proc.returncode)
 
     def postprocess(self, mask: np.ndarray, organ: str, config: Dict) -> np.ndarray:
         """Apply organ-specific postprocessing chain to a binary mask array."""

@@ -211,6 +211,16 @@ class TestGeometricQC:
         liver_r = next(r for r in result.organ_results if r.organ == "liver")
         assert liver_r.severity in ("PASS", "WARN")   # synthetic may be off but not ERROR
 
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "Connected-component check is currently disabled in "
+            "qc/geometric_qc.py (~lines 173-174 and 283-310) — postprocessing "
+            "now keeps only the largest CC, so the in-QC CC count is always 1. "
+            "Restore _check_connected_components and remove this xfail if you "
+            "want fragment detection back."
+        ),
+    )
     def test_fragmented_organ_flagged(self, tmp_path, ref_file):
         """Two-sphere mask → CC=2 flag set."""
         seg_dir = str(tmp_path / "seg_frag")
@@ -251,6 +261,14 @@ class TestGeometricQC:
         assert result.worst_severity == "ERROR"
         assert result.error != ""
 
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "Mask-overlap check is currently disabled in qc/geometric_qc.py "
+            "(~lines 188-189 and 353-385). Restore _check_overlap and remove "
+            "this xfail if you want overlap detection back."
+        ),
+    )
     def test_overlap_detected(self, tmp_path, ref_file):
         """Two fully overlapping masks → overlap flag on at least one organ."""
         seg_dir = str(tmp_path / "seg_overlap")
