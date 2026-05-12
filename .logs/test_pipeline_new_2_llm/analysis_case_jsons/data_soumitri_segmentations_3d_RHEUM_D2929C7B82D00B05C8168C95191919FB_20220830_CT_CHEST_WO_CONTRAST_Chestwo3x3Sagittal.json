@@ -1,0 +1,37 @@
+{
+  "case_id": "data_soumitri_segmentations_3d_RHEUM_D2929C7B82D00B05C8168C95191919FB_20220830_CT_CHEST_WO_CONTRAST_Chestwo3x3Sagittal",
+  "case_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_D2929C7B82D00B05C8168C95191919FB_20220830_CT_CHEST_WO_CONTRAST_Chestwo3x3Sagittal",
+  "volume_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_D2929C7B82D00B05C8168C95191919FB_20220830_CT_CHEST_WO_CONTRAST_Chestwo3x3Sagittal/volume.nii.gz",
+  "organs": {
+    "liver": {
+      "raw_models": {},
+      "qc_models": {},
+      "consensus_binary": null,
+      "consensus_soft": null
+    },
+    "spleen": {
+      "raw_models": {},
+      "qc_models": {},
+      "consensus_binary": null,
+      "consensus_soft": null
+    },
+    "kidney_left": {
+      "raw_models": {},
+      "qc_models": {},
+      "consensus_binary": null,
+      "consensus_soft": null
+    },
+    "kidney_right": {
+      "raw_models": {},
+      "qc_models": {},
+      "consensus_binary": null,
+      "consensus_soft": null
+    },
+    "pancreas": {
+      "raw_models": {},
+      "qc_models": {},
+      "consensus_binary": null,
+      "consensus_soft": null
+    }
+  }
+}

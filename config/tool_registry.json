@@ -131,26 +131,6 @@
       "version_verified": "v2 (Oct 2025)"
     },
     {
-      "name": "TextMedSeg3D",
-      "class": "tools.textmedseg3d.TextMedSeg3DTool",
-      "description": "SAT (Segment Anything Textual). Text-prompted 3D segmentation trained on 72 public datasets with 497 classes across CT, MRI, and PET. Covers 8 body regions. Invoked via torchrun subprocess with a JSONL input spec.",
-      "supported_modalities": ["CT", "MRI", "PET_CT"],
-      "supported_anatomies": ["all"],
-      "supports_2d": false,
-      "supports_3d": true,
-      "prompt_source": "LLM planner provides organ/structure names as text; passed as label_names list in JSONL",
-      "cli_command": "torchrun --nproc_per_node=1 inference.py --datasets_jsonl {jsonl} --vision_backbone UNET-L --checkpoint {checkpoint} --text_encoder ours --text_encoder_checkpoint {text_ckpt} --rcd_dir {output}",
-      "output_dir": "segmentations_textmedseg3d",
-      "output_format": "per_organ_nifti",
-      "conda_env": "cdw_textmedseg",
-      "deferred": true,
-      "deferred_reason": "dependency issues",
-      "notes": "Input must be RAS orientation. JSONL format: {image, label_names, dataset, modality, orientation_code}. SAT-Pro (~34-62GB GPU); SAT-Nano (~24-36GB GPU).",
-      "reference": "SAT: Segment Anything in Medical Images with Text, 2024",
-      "github": "https://github.com/zhaoziheng/SAT",
-      "version_verified": "latest (no version pin in repo)"
-    },
-    {
       "name": "BiomedParse2D",
       "class": "tools.biomedparse2d.BiomedParse2DTool",
       "description": "BiomedParse v1. Text-prompted 2D segmentation across 9 biomedical imaging modalities (CT, MRI, Ultrasound, X-Ray, Pathology, Endoscopy, Dermoscopy, Fundus, OCT). 100+ classes. Python API only. DEFERRED — pipeline focuses on 3D volumes.",
@@ -220,6 +200,26 @@
       "reference": "nnInteractive, DKFZ, 2025",
       "github": "https://github.com/MIC-DKFZ/nnInteractive",
       "version_verified": "1.1.4"
+    },
+    {
+      "name": "TextMedSeg3D",
+      "class": "tools.textmedseg3d.TextMedSeg3DTool",
+      "description": "SAT (Segment Anything Textual). Text-prompted 3D segmentation trained on 72 public datasets with 497 classes across CT, MRI, and PET. Covers 8 body regions. Invoked via torchrun subprocess with a JSONL input spec.",
+      "supported_modalities": ["CT", "MRI", "PET_CT"],
+      "supported_anatomies": ["all"],
+      "supports_2d": false,
+      "supports_3d": true,
+      "prompt_source": "LLM planner provides organ/structure names as text; passed as label_names list in JSONL",
+      "cli_command": "torchrun --nproc_per_node=1 inference.py --datasets_jsonl {jsonl} --vision_backbone UNET-L --checkpoint {checkpoint} --text_encoder ours --text_encoder_checkpoint {text_ckpt} --rcd_dir {output}",
+      "output_dir": "segmentations_textmedseg3d",
+      "output_format": "per_organ_nifti",
+      "conda_env": "cdw_textmedseg",
+      "deferred": true,
+      "deferred_reason": "dependency issues",
+      "notes": "Input must be RAS orientation. JSONL format: {image, label_names, dataset, modality, orientation_code}. SAT-Pro (~34-62GB GPU); SAT-Nano (~24-36GB GPU).",
+      "reference": "SAT: Segment Anything in Medical Images with Text, 2024",
+      "github": "https://github.com/zhaoziheng/SAT",
+      "version_verified": "latest (no version pin in repo)"
     },
     {
       "name": "HybridGNet",

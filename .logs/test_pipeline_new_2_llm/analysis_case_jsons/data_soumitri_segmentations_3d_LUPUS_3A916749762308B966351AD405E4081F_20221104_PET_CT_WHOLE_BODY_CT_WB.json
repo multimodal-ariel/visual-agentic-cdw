@@ -1,0 +1,129 @@
+{
+  "case_id": "data_soumitri_segmentations_3d_LUPUS_3A916749762308B966351AD405E4081F_20221104_PET_CT_WHOLE_BODY_CT_WB",
+  "case_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_LUPUS_3A916749762308B966351AD405E4081F_20221104_PET_CT_WHOLE_BODY_CT_WB",
+  "volume_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_LUPUS_3A916749762308B966351AD405E4081F_20221104_PET_CT_WHOLE_BODY_CT_WB/volume.nii.gz",
+  "organs": {
+    "liver": {
+      "raw_models": {
+        "voxtell": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_LUPUS_3A916749762308B966351AD405E4081F_20221104_PET_CT_WHOLE_BODY_CT_WB/segmentations_voxtell/liver.nii.gz",
+          "volume_ml": 0.0,
+          "num_voxels": 0,
+          "radiomics": {}
+        }
+      },
+      "qc_models": {
+        "voxtell": {
+          "present": false
+        }
+      },
+      "consensus_binary": null,
+      "consensus_soft": null
+    },
+    "spleen": {
+      "raw_models": {
+        "voxtell": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_LUPUS_3A916749762308B966351AD405E4081F_20221104_PET_CT_WHOLE_BODY_CT_WB/segmentations_voxtell/spleen.nii.gz",
+          "volume_ml": 163.55140686035156,
+          "num_voxels": 29166,
+          "radiomics": {
+            "firstorder_Mean": 39.03274360556813,
+            "firstorder_Entropy": 2.1064905290939024,
+            "glcm_Contrast": 2.064748001261618
+          }
+        }
+      },
+      "qc_models": {
+        "voxtell": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_LUPUS_3A916749762308B966351AD405E4081F_20221104_PET_CT_WHOLE_BODY_CT_WB/qc_tier1_filtered/segmentations_voxtell/spleen.nii.gz",
+          "volume_ml": 163.55140686035156,
+          "num_voxels": 29166,
+          "radiomics": {
+            "firstorder_Mean": 39.03274360556813,
+            "firstorder_Entropy": 2.1064905290939024,
+            "glcm_Contrast": 2.064748001261618
+          }
+        }
+      },
+      "consensus_binary": null,
+      "consensus_soft": null
+    },
+    "kidney_left": {
+      "raw_models": {
+        "voxtell": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_LUPUS_3A916749762308B966351AD405E4081F_20221104_PET_CT_WHOLE_BODY_CT_WB/segmentations_voxtell/kidney_left.nii.gz",
+          "volume_ml": 223.74343872070312,
+          "num_voxels": 39900,
+          "radiomics": {
+            "firstorder_Mean": 34.30070175438596,
+            "firstorder_Entropy": 2.2636066390868304,
+            "glcm_Contrast": 2.3993402225474254
+          }
+        }
+      },
+      "qc_models": {
+        "voxtell": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_LUPUS_3A916749762308B966351AD405E4081F_20221104_PET_CT_WHOLE_BODY_CT_WB/qc_tier1_filtered/segmentations_voxtell/kidney_left.nii.gz",
+          "volume_ml": 223.74343872070312,
+          "num_voxels": 39900,
+          "radiomics": {
+            "firstorder_Mean": 34.30070175438596,
+            "firstorder_Entropy": 2.2636066390868304,
+            "glcm_Contrast": 2.3993402225474254
+          }
+        }
+      },
+      "consensus_binary": null,
+      "consensus_soft": null
+    },
+    "kidney_right": {
+      "raw_models": {
+        "voxtell": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_LUPUS_3A916749762308B966351AD405E4081F_20221104_PET_CT_WHOLE_BODY_CT_WB/segmentations_voxtell/kidney_right.nii.gz",
+          "volume_ml": 0.022430419921875,
+          "num_voxels": 4,
+          "radiomics": {
+            "firstorder_Mean": 26.75,
+            "firstorder_Entropy": 0.9999999999999993,
+            "glcm_Contrast": 0.5
+          }
+        }
+      },
+      "qc_models": {
+        "voxtell": {
+          "present": false
+        }
+      },
+      "consensus_binary": null,
+      "consensus_soft": null
+    },
+    "pancreas": {
+      "raw_models": {
+        "voxtell": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_LUPUS_3A916749762308B966351AD405E4081F_20221104_PET_CT_WHOLE_BODY_CT_WB/segmentations_voxtell/pancreas.nii.gz",
+          "volume_ml": 27.578201293945312,
+          "num_voxels": 4918,
+          "radiomics": {
+            "firstorder_Mean": 34.02155347702318,
+            "firstorder_Entropy": 1.743412935605666,
+            "glcm_Contrast": 1.104960863426863
+          }
+        }
+      },
+      "qc_models": {
+        "voxtell": {
+          "present": false
+        }
+      },
+      "consensus_binary": null,
+      "consensus_soft": null
+    }
+  }
+}

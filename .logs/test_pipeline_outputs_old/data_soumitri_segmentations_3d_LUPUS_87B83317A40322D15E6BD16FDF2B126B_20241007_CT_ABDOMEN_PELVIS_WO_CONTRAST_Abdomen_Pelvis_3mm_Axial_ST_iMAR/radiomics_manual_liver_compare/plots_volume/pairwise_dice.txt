@@ -1,0 +1,5 @@
+mrseg_vs_totalseg: 0.7339
+mrseg_vs_vista3d:  0.8248
+totalseg_vs_vista3d:0.6091
+disagreement_voxels: 610980
+union_voxels: 1055529

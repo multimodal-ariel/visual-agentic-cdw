@@ -1,0 +1,37 @@
+{
+  "case_id": "analysis_case_jsons",
+  "case_path": "/data/soumitri/test_pipeline_new_2_llm/analysis_case_jsons",
+  "volume_path": null,
+  "organs": {
+    "liver": {
+      "raw_models": {},
+      "qc_models": {},
+      "consensus_binary": null,
+      "consensus_soft": null
+    },
+    "spleen": {
+      "raw_models": {},
+      "qc_models": {},
+      "consensus_binary": null,
+      "consensus_soft": null
+    },
+    "kidney_left": {
+      "raw_models": {},
+      "qc_models": {},
+      "consensus_binary": null,
+      "consensus_soft": null
+    },
+    "kidney_right": {
+      "raw_models": {},
+      "qc_models": {},
+      "consensus_binary": null,
+      "consensus_soft": null
+    },
+    "pancreas": {
+      "raw_models": {},
+      "qc_models": {},
+      "consensus_binary": null,
+      "consensus_soft": null
+    }
+  }
+}

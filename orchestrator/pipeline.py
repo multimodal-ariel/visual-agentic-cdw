@@ -254,23 +254,26 @@ class CasePipeline:
 
             print(seg_dirs)
 
-            # Step 5: QC (Tier 1 + Tier 2)
-            self._step_qc(case_path, seg_dirs, result)
+            '''[May-11-2026: Disabling this super complicated QC checking. Radiomics will be done offline separately.]'''
 
-            # Step 5b: weighted fusion
-            if self.consensus and len(seg_dirs) >= 2:
-                self._step_weighted_fusion(case_path, seg_dirs, result)
+            # # Step 5: QC (Tier 1 + Tier 2)
+            # self._step_qc(case_path, seg_dirs, result)
 
-            # [skipped] Step 6: LLM QC interpretation (Tier 3)
-            # self._step_qc_interpretation(result)
+            # # Step 5b: weighted fusion
+            # if self.consensus and len(seg_dirs) >= 2:
+            #     self._step_weighted_fusion(case_path, seg_dirs, result)
 
-            # Step 7: Radiomics extraction
-            # If consensus masks exist, prefer them for radiomics
-            radiomics_seg_dirs = seg_dirs
-            if self.consensus and hasattr(result, "_consensus_dir"):
-                radiomics_seg_dirs = {"consensus": result._consensus_dir, **seg_dirs}
-            if not self.skip_radiomics:
-                self._step_radiomics(case_path, image_path, radiomics_seg_dirs, result)
+            # # [skipped] Step 6: LLM QC interpretation (Tier 3)
+            # # self._step_qc_interpretation(result)
+
+            # # Step 7: Radiomics extraction
+            # # If consensus masks exist, prefer them for radiomics
+            # radiomics_seg_dirs = seg_dirs
+            # if self.consensus and hasattr(result, "_consensus_dir"):
+            #     radiomics_seg_dirs = {"consensus": result._consensus_dir, **seg_dirs}
+
+            # if not self.skip_radiomics:
+            #     self._step_radiomics(case_path, image_path, radiomics_seg_dirs, result)
 
             result.status = "completed"
 

@@ -263,6 +263,7 @@ class BatchRunner:
             paths = raw
         elif isinstance(raw, dict) and "cases" in raw:
             paths = raw["cases"]
+
         else:
             raise ValueError(f"Unexpected filelist format in {self.filelist}")
 

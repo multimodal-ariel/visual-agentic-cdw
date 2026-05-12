@@ -1,0 +1,540 @@
+{
+  "case_id": "data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN",
+  "case_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN",
+  "volume_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/volume.nii.gz",
+  "organs": {
+    "liver": {
+      "raw_models": {
+        "mrseg": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_mrseg/liver.nii.gz",
+          "volume_ml": 774.093870896314,
+          "num_voxels": 311422,
+          "radiomics": {
+            "firstorder_Mean": 123.21477288052867,
+            "firstorder_Entropy": 1.4793993685014117,
+            "glcm_Contrast": 0.6883569958735702
+          }
+        },
+        "totalseg_ct": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_totalseg_ct/liver.nii.gz",
+          "volume_ml": 1061.253957624829,
+          "num_voxels": 426948,
+          "radiomics": {
+            "firstorder_Mean": 122.83332630671651,
+            "firstorder_Entropy": 1.5800450130397385,
+            "glcm_Contrast": 0.7691442683884807
+          }
+        },
+        "voxtell": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_voxtell/liver.nii.gz",
+          "volume_ml": 55.2391548860671,
+          "num_voxels": 22223,
+          "radiomics": {
+            "firstorder_Mean": 121.67029653962112,
+            "firstorder_Entropy": 1.815624354085453,
+            "glcm_Contrast": 1.125223397984479
+          }
+        },
+        "vista3d": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_vista3d/liver.nii.gz",
+          "volume_ml": 1418.7810171144324,
+          "num_voxels": 570783,
+          "radiomics": {
+            "firstorder_Mean": 121.4446330742156,
+            "firstorder_Entropy": 1.6352946995956417,
+            "glcm_Contrast": 0.8004455839326969
+          }
+        }
+      },
+      "qc_models": {
+        "mrseg": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/qc_tier1_filtered/segmentations_mrseg/liver.nii.gz",
+          "volume_ml": 774.093870896314,
+          "num_voxels": 311422,
+          "radiomics": {
+            "firstorder_Mean": 123.21477288052867,
+            "firstorder_Entropy": 1.4793993685014117,
+            "glcm_Contrast": 0.6883569958735702
+          }
+        },
+        "totalseg_ct": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/qc_tier1_filtered/segmentations_totalseg_ct/liver.nii.gz",
+          "volume_ml": 1061.253957624829,
+          "num_voxels": 426948,
+          "radiomics": {
+            "firstorder_Mean": 122.83332630671651,
+            "firstorder_Entropy": 1.5800450130397385,
+            "glcm_Contrast": 0.7691442683884807
+          }
+        },
+        "voxtell": {
+          "present": false
+        },
+        "vista3d": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/qc_tier1_filtered/segmentations_vista3d/liver.nii.gz",
+          "volume_ml": 1418.7810171144324,
+          "num_voxels": 570783,
+          "radiomics": {
+            "firstorder_Mean": 121.4446330742156,
+            "firstorder_Entropy": 1.6352946995956417,
+            "glcm_Contrast": 0.8004455839326969
+          }
+        }
+      },
+      "consensus_binary": {
+        "present": true,
+        "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_consensus/liver.nii.gz",
+        "volume_ml": 1013.0815766820228,
+        "num_voxels": 407568,
+        "radiomics": {
+          "firstorder_Mean": 123.58868458760256,
+          "firstorder_Entropy": 1.5174250746618123,
+          "glcm_Contrast": 0.7101432909008168
+        }
+      },
+      "consensus_soft": {
+        "present": true,
+        "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_consensus_soft/liver.nii.gz",
+        "support_voxels": 580272,
+        "core_voxels": 290984,
+        "uncertain_shell_voxels": 289288,
+        "uncertainty_fraction": 0.4985386163730113,
+        "shell_core_ratio": 0.9941715008385341,
+        "mean_probability_in_support": 0.7483528852462769,
+        "mean_entropy_in_support": NaN,
+        "max_entropy_in_support": NaN
+      }
+    },
+    "spleen": {
+      "raw_models": {
+        "mrseg": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_mrseg/spleen.nii.gz",
+          "volume_ml": 216.07226822576405,
+          "num_voxels": 86927,
+          "radiomics": {
+            "firstorder_Mean": 111.65759775443763,
+            "firstorder_Entropy": 1.4273616214691032,
+            "glcm_Contrast": 0.6251686571224584
+          }
+        },
+        "totalseg_ct": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_totalseg_ct/spleen.nii.gz",
+          "volume_ml": 122.71280198062189,
+          "num_voxels": 49368,
+          "radiomics": {
+            "firstorder_Mean": 111.92215605250365,
+            "firstorder_Entropy": 1.4249038320731546,
+            "glcm_Contrast": 0.6212099125475175
+          }
+        },
+        "voxtell": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_voxtell/spleen.nii.gz",
+          "volume_ml": 0.0,
+          "num_voxels": 0,
+          "radiomics": {}
+        },
+        "vista3d": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_vista3d/spleen.nii.gz",
+          "volume_ml": 297.152500112936,
+          "num_voxels": 119546,
+          "radiomics": {
+            "firstorder_Mean": 106.88079902297024,
+            "firstorder_Entropy": 1.6999128069205791,
+            "glcm_Contrast": 0.9559895956535838
+          }
+        }
+      },
+      "qc_models": {
+        "mrseg": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/qc_tier1_filtered/segmentations_mrseg/spleen.nii.gz",
+          "volume_ml": 216.07226822576405,
+          "num_voxels": 86927,
+          "radiomics": {
+            "firstorder_Mean": 111.65759775443763,
+            "firstorder_Entropy": 1.4273616214691032,
+            "glcm_Contrast": 0.6251686571224584
+          }
+        },
+        "totalseg_ct": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/qc_tier1_filtered/segmentations_totalseg_ct/spleen.nii.gz",
+          "volume_ml": 122.71280198062189,
+          "num_voxels": 49368,
+          "radiomics": {
+            "firstorder_Mean": 111.92215605250365,
+            "firstorder_Entropy": 1.4249038320731546,
+            "glcm_Contrast": 0.6212099125475175
+          }
+        },
+        "voxtell": {
+          "present": false
+        },
+        "vista3d": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/qc_tier1_filtered/segmentations_vista3d/spleen.nii.gz",
+          "volume_ml": 297.152500112936,
+          "num_voxels": 119546,
+          "radiomics": {
+            "firstorder_Mean": 106.88079902297024,
+            "firstorder_Entropy": 1.6999128069205791,
+            "glcm_Contrast": 0.9559895956535838
+          }
+        }
+      },
+      "consensus_binary": {
+        "present": true,
+        "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_consensus/spleen.nii.gz",
+        "volume_ml": 186.19445507135077,
+        "num_voxels": 74907,
+        "radiomics": {
+          "firstorder_Mean": 112.29339047085053,
+          "firstorder_Entropy": 1.4107200629640646,
+          "glcm_Contrast": 0.6060086171311329
+        }
+      },
+      "consensus_soft": {
+        "present": true,
+        "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_consensus_soft/spleen.nii.gz",
+        "support_voxels": 120462,
+        "core_voxels": 45743,
+        "uncertain_shell_voxels": 74719,
+        "uncertainty_fraction": 0.6202702927064137,
+        "shell_core_ratio": 1.63345211289159,
+        "mean_probability_in_support": 0.7351013422012329,
+        "mean_entropy_in_support": NaN,
+        "max_entropy_in_support": NaN
+      }
+    },
+    "kidney_left": {
+      "raw_models": {
+        "mrseg": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_mrseg/kidney_left.nii.gz",
+          "volume_ml": 163.0503354140511,
+          "num_voxels": 65596,
+          "radiomics": {
+            "firstorder_Mean": 155.24640221964754,
+            "firstorder_Entropy": 2.4345792963818984,
+            "glcm_Contrast": 2.0884068091563432
+          }
+        },
+        "totalseg_ct": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_totalseg_ct/kidney_left.nii.gz",
+          "volume_ml": 166.19719992765235,
+          "num_voxels": 66862,
+          "radiomics": {
+            "firstorder_Mean": 152.78841494421346,
+            "firstorder_Entropy": 2.522879582545056,
+            "glcm_Contrast": 2.3553929691850004
+          }
+        },
+        "voxtell": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_voxtell/kidney_left.nii.gz",
+          "volume_ml": 145.97374836157027,
+          "num_voxels": 58726,
+          "radiomics": {
+            "firstorder_Mean": 146.1115349249055,
+            "firstorder_Entropy": 2.704699007641124,
+            "glcm_Contrast": 2.842109229931961
+          }
+        },
+        "vista3d": {
+          "present": false
+        }
+      },
+      "qc_models": {
+        "mrseg": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/qc_tier1_filtered/segmentations_mrseg/kidney_left.nii.gz",
+          "volume_ml": 163.0503354140511,
+          "num_voxels": 65596,
+          "radiomics": {
+            "firstorder_Mean": 155.24640221964754,
+            "firstorder_Entropy": 2.4345792963818984,
+            "glcm_Contrast": 2.0884068091563432
+          }
+        },
+        "totalseg_ct": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/qc_tier1_filtered/segmentations_totalseg_ct/kidney_left.nii.gz",
+          "volume_ml": 166.19719992765235,
+          "num_voxels": 66862,
+          "radiomics": {
+            "firstorder_Mean": 152.78841494421346,
+            "firstorder_Entropy": 2.522879582545056,
+            "glcm_Contrast": 2.3553929691850004
+          }
+        },
+        "voxtell": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/qc_tier1_filtered/segmentations_voxtell/kidney_left.nii.gz",
+          "volume_ml": 145.97374836157027,
+          "num_voxels": 58726,
+          "radiomics": {
+            "firstorder_Mean": 146.1115349249055,
+            "firstorder_Entropy": 2.704699007641124,
+            "glcm_Contrast": 2.842109229931961
+          }
+        },
+        "vista3d": {
+          "present": false
+        }
+      },
+      "consensus_binary": {
+        "present": true,
+        "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_consensus/kidney_left.nii.gz",
+        "volume_ml": 161.19353621052804,
+        "num_voxels": 64849,
+        "radiomics": {
+          "firstorder_Mean": 152.75939490200312,
+          "firstorder_Entropy": 2.533512700371798,
+          "glcm_Contrast": 2.2809542296183536
+        }
+      },
+      "consensus_soft": {
+        "present": true,
+        "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_consensus_soft/kidney_left.nii.gz",
+        "support_voxels": 73014,
+        "core_voxels": 51730,
+        "uncertain_shell_voxels": 21284,
+        "uncertainty_fraction": 0.2915057386254691,
+        "shell_core_ratio": 0.41144403634254784,
+        "mean_probability_in_support": 0.8800726532936096,
+        "mean_entropy_in_support": NaN,
+        "max_entropy_in_support": NaN
+      }
+    },
+    "kidney_right": {
+      "raw_models": {
+        "mrseg": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_mrseg/kidney_right.nii.gz",
+          "volume_ml": 145.46915634240673,
+          "num_voxels": 58523,
+          "radiomics": {
+            "firstorder_Mean": 157.07152743365856,
+            "firstorder_Entropy": 2.3204366772170326,
+            "glcm_Contrast": 1.8331750113781633
+          }
+        },
+        "totalseg_ct": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_totalseg_ct/kidney_right.nii.gz",
+          "volume_ml": 151.77282806949424,
+          "num_voxels": 61059,
+          "radiomics": {
+            "firstorder_Mean": 152.72868864540854,
+            "firstorder_Entropy": 2.4889809309357585,
+            "glcm_Contrast": 2.1927598575783773
+          }
+        },
+        "voxtell": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_voxtell/kidney_right.nii.gz",
+          "volume_ml": 117.8955638863413,
+          "num_voxels": 47430,
+          "radiomics": {
+            "firstorder_Mean": 150.4889943074004,
+            "firstorder_Entropy": 2.5786202236521243,
+            "glcm_Contrast": 2.377365109159016
+          }
+        },
+        "vista3d": {
+          "present": false
+        }
+      },
+      "qc_models": {
+        "mrseg": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/qc_tier1_filtered/segmentations_mrseg/kidney_right.nii.gz",
+          "volume_ml": 145.46915634240673,
+          "num_voxels": 58523,
+          "radiomics": {
+            "firstorder_Mean": 157.07152743365856,
+            "firstorder_Entropy": 2.3204366772170326,
+            "glcm_Contrast": 1.8331750113781633
+          }
+        },
+        "totalseg_ct": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/qc_tier1_filtered/segmentations_totalseg_ct/kidney_right.nii.gz",
+          "volume_ml": 151.77282806949424,
+          "num_voxels": 61059,
+          "radiomics": {
+            "firstorder_Mean": 152.72868864540854,
+            "firstorder_Entropy": 2.4889809309357585,
+            "glcm_Contrast": 2.1927598575783773
+          }
+        },
+        "voxtell": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/qc_tier1_filtered/segmentations_voxtell/kidney_right.nii.gz",
+          "volume_ml": 117.8955638863413,
+          "num_voxels": 47430,
+          "radiomics": {
+            "firstorder_Mean": 150.4889943074004,
+            "firstorder_Entropy": 2.5786202236521243,
+            "glcm_Contrast": 2.377365109159016
+          }
+        },
+        "vista3d": {
+          "present": false
+        }
+      },
+      "consensus_binary": {
+        "present": true,
+        "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_consensus/kidney_right.nii.gz",
+        "volume_ml": 142.31483480389173,
+        "num_voxels": 57254,
+        "radiomics": {
+          "firstorder_Mean": 154.4092465155273,
+          "firstorder_Entropy": 2.450099922722337,
+          "glcm_Contrast": 2.0578258632820896
+        }
+      },
+      "consensus_soft": {
+        "present": true,
+        "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_consensus_soft/kidney_right.nii.gz",
+        "support_voxels": 64142,
+        "core_voxels": 43163,
+        "uncertain_shell_voxels": 20979,
+        "uncertainty_fraction": 0.32707118580649186,
+        "shell_core_ratio": 0.4860412853601464,
+        "mean_probability_in_support": 0.880020260810852,
+        "mean_entropy_in_support": NaN,
+        "max_entropy_in_support": NaN
+      }
+    },
+    "pancreas": {
+      "raw_models": {
+        "mrseg": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_mrseg/pancreas.nii.gz",
+          "volume_ml": 31.814153957016277,
+          "num_voxels": 12799,
+          "radiomics": {
+            "firstorder_Mean": 96.33885459801547,
+            "firstorder_Entropy": 1.6370107121727555,
+            "glcm_Contrast": 0.7489465926025682
+          }
+        },
+        "totalseg_ct": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_totalseg_ct/pancreas.nii.gz",
+          "volume_ml": 42.646725481719535,
+          "num_voxels": 17157,
+          "radiomics": {
+            "firstorder_Mean": 89.66346097802646,
+            "firstorder_Entropy": 1.9546144370383685,
+            "glcm_Contrast": 1.0760814938556462
+          }
+        },
+        "voxtell": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_voxtell/pancreas.nii.gz",
+          "volume_ml": 53.59612373007149,
+          "num_voxels": 21562,
+          "radiomics": {
+            "firstorder_Mean": 83.96762823485761,
+            "firstorder_Entropy": 2.3433435425209614,
+            "glcm_Contrast": 1.3562898703159176
+          }
+        },
+        "vista3d": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_vista3d/pancreas.nii.gz",
+          "volume_ml": 84.0481278028433,
+          "num_voxels": 33813,
+          "radiomics": {
+            "firstorder_Mean": 91.21701712359152,
+            "firstorder_Entropy": 1.9992342410800097,
+            "glcm_Contrast": 1.119271602099793
+          }
+        }
+      },
+      "qc_models": {
+        "mrseg": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/qc_tier1_filtered/segmentations_mrseg/pancreas.nii.gz",
+          "volume_ml": 31.814153957016277,
+          "num_voxels": 12799,
+          "radiomics": {
+            "firstorder_Mean": 96.33885459801547,
+            "firstorder_Entropy": 1.6370107121727555,
+            "glcm_Contrast": 0.7489465926025682
+          }
+        },
+        "totalseg_ct": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/qc_tier1_filtered/segmentations_totalseg_ct/pancreas.nii.gz",
+          "volume_ml": 42.646725481719535,
+          "num_voxels": 17157,
+          "radiomics": {
+            "firstorder_Mean": 89.66346097802646,
+            "firstorder_Entropy": 1.9546144370383685,
+            "glcm_Contrast": 1.0760814938556462
+          }
+        },
+        "voxtell": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/qc_tier1_filtered/segmentations_voxtell/pancreas.nii.gz",
+          "volume_ml": 53.59612373007149,
+          "num_voxels": 21562,
+          "radiomics": {
+            "firstorder_Mean": 83.96762823485761,
+            "firstorder_Entropy": 2.3433435425209614,
+            "glcm_Contrast": 1.3562898703159176
+          }
+        },
+        "vista3d": {
+          "present": true,
+          "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/qc_tier1_filtered/segmentations_vista3d/pancreas.nii.gz",
+          "volume_ml": 84.0481278028433,
+          "num_voxels": 33813,
+          "radiomics": {
+            "firstorder_Mean": 91.21701712359152,
+            "firstorder_Entropy": 1.9992342410800097,
+            "glcm_Contrast": 1.119271602099793
+          }
+        }
+      },
+      "consensus_binary": {
+        "present": true,
+        "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_consensus/pancreas.nii.gz",
+        "volume_ml": 31.50841593555265,
+        "num_voxels": 12676,
+        "radiomics": {
+          "firstorder_Mean": 91.9255285579047,
+          "firstorder_Entropy": 1.9218531992564296,
+          "glcm_Contrast": 1.0047764563304074
+        }
+      },
+      "consensus_soft": {
+        "present": true,
+        "mask_path": "/data/soumitri/test_pipeline_new_2_llm/data_soumitri_segmentations_3d_RHEUM_1FD8475CD13FC4D01B6E1145E25F651C_20221222_CT_ABDOMEN_PELVIS_W_CONTRAST_ABDOMEN/segmentations_consensus_soft/pancreas.nii.gz",
+        "support_voxels": 43383,
+        "core_voxels": 14094,
+        "uncertain_shell_voxels": 20887,
+        "uncertainty_fraction": 0.4814558698107554,
+        "shell_core_ratio": 1.4819781467291047,
+        "mean_probability_in_support": 0.5271614789962769,
+        "mean_entropy_in_support": NaN,
+        "max_entropy_in_support": NaN
+      }
+    }
+  }
+}
