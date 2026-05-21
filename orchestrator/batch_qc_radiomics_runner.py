@@ -80,6 +80,14 @@ class CandidateMask:
     mask_path: str
     voxel_count: int
     volume_ml: float
+    image_spacing: tuple[float, float, float]
+    mask_spacing: tuple[float, float, float]
+    shape_match: bool
+    spacing_match: bool
+    affine_match: bool
+    geometry_match: bool
+    volume_spacing_source: str
+    geometry_warning: str = ""
 
 
 @dataclass
@@ -334,13 +342,59 @@ def discover_tool_dirs(case_path: str, tools_run: list[str]) -> list[tuple[str, 
     return pairs
 
 
-def mask_volume(mask_path: str) -> tuple[int, float]:
-    img = nib.load(mask_path)
-    data = np.asanyarray(img.dataobj)
+def mask_volume(mask_path: str, image_path: str) -> tuple[int, float, dict[str, Any]]:
+    mask_img = nib.load(mask_path)
+    data = np.asanyarray(mask_img.dataobj)
     voxel_count = int(np.count_nonzero(data > 0))
-    zooms = img.header.get_zooms()[:3]
+
+    # Prefer the reference image spacing. Masks are expected to be on the same
+    # grid as image_nifti.nii.gz, but tool-written mask headers are not always
+    # the safest source of truth. If the grids do not match, fall back to the
+    # mask header because the count came from the mask array.
+    image_img = nib.load(image_path)
+    image_spacing = tuple(float(x) for x in image_img.header.get_zooms()[:3])
+    mask_spacing = tuple(float(x) for x in mask_img.header.get_zooms()[:3])
+    shape_match = tuple(mask_img.shape[:3]) == tuple(image_img.shape[:3])
+    spacing_match = np.allclose(mask_spacing, image_spacing, rtol=1e-4, atol=1e-4)
+    affine_match = np.allclose(mask_img.affine, image_img.affine, rtol=1e-4, atol=1e-4)
+    geometry_match = bool(shape_match and spacing_match and affine_match)
+
+    if shape_match:
+        zooms = image_spacing
+        spacing_source = "image"
+    else:
+        logger.warning(
+            "Mask/image shape mismatch for volume calculation: mask=%s image=%s "
+            "(using mask spacing)",
+            mask_img.shape[:3],
+            image_img.shape[:3],
+        )
+        zooms = mask_spacing
+        spacing_source = "mask"
+
     voxel_volume_ml = float(np.prod(zooms)) / 1000.0 if len(zooms) >= 3 else 0.001
-    return voxel_count, voxel_count * voxel_volume_ml
+    warning_parts = []
+    if not shape_match:
+        warning_parts.append(f"shape mask={tuple(mask_img.shape[:3])} image={tuple(image_img.shape[:3])}")
+    if not spacing_match:
+        warning_parts.append(f"spacing mask={mask_spacing} image={image_spacing}")
+    if not affine_match:
+        warning_parts.append("affine mismatch")
+
+    return (
+        voxel_count,
+        voxel_count * voxel_volume_ml,
+        {
+            "image_spacing": image_spacing,
+            "mask_spacing": mask_spacing,
+            "shape_match": shape_match,
+            "spacing_match": bool(spacing_match),
+            "affine_match": bool(affine_match),
+            "geometry_match": geometry_match,
+            "volume_spacing_source": spacing_source,
+            "geometry_warning": "; ".join(warning_parts),
+        },
+    )
 
 
 def load_volume_array(path: str) -> np.ndarray:
@@ -357,6 +411,7 @@ def discover_candidates(
     tools_run: list[str],
     target_organs: tuple[str, ...] = TARGET_ORGANS,
 ) -> dict[str, list[CandidateMask]]:
+    image_path = os.path.join(case_path, IMAGE_FILENAME)
     out: dict[str, list[CandidateMask]] = {organ: [] for organ in target_organs}
     for tool_name, seg_dir in discover_tool_dirs(case_path, tools_run):
         existing = {name.lower(): name for name in os.listdir(seg_dir)}
@@ -370,7 +425,7 @@ def discover_candidates(
             if not mask_path:
                 continue
             try:
-                voxel_count, volume_ml = mask_volume(mask_path)
+                voxel_count, volume_ml, geometry = mask_volume(mask_path, image_path)
             except Exception as exc:
                 logger.warning("Could not read mask volume (%s): %s", mask_path, exc)
                 continue
@@ -384,6 +439,14 @@ def discover_candidates(
                     mask_path=mask_path,
                     voxel_count=voxel_count,
                     volume_ml=volume_ml,
+                    image_spacing=geometry["image_spacing"],
+                    mask_spacing=geometry["mask_spacing"],
+                    shape_match=geometry["shape_match"],
+                    spacing_match=geometry["spacing_match"],
+                    affine_match=geometry["affine_match"],
+                    geometry_match=geometry["geometry_match"],
+                    volume_spacing_source=geometry["volume_spacing_source"],
+                    geometry_warning=geometry["geometry_warning"],
                 )
             )
     return out
@@ -584,6 +647,14 @@ class BatchQCRadiomicsRunner:
                 "mask_path",
                 "voxel_count",
                 "volume_ml",
+                "image_spacing",
+                "mask_spacing",
+                "shape_match",
+                "spacing_match",
+                "affine_match",
+                "geometry_match",
+                "volume_spacing_source",
+                "geometry_warning",
                 "qc_score",
                 "qc_predicted_organ",
                 "qc_predicted_organ_idx",
@@ -771,6 +842,14 @@ class BatchQCRadiomicsRunner:
                         "mask_path": candidate.mask_path,
                         "voxel_count": candidate.voxel_count,
                         "volume_ml": round(candidate.volume_ml, 6),
+                        "image_spacing": "x".join(f"{x:.6g}" for x in candidate.image_spacing),
+                        "mask_spacing": "x".join(f"{x:.6g}" for x in candidate.mask_spacing),
+                        "shape_match": candidate.shape_match,
+                        "spacing_match": candidate.spacing_match,
+                        "affine_match": candidate.affine_match,
+                        "geometry_match": candidate.geometry_match,
+                        "volume_spacing_source": candidate.volume_spacing_source,
+                        "geometry_warning": candidate.geometry_warning,
                         "qc_score": "" if qc.qc_score is None else round(qc.qc_score, 6),
                         "qc_predicted_organ": qc.qc_predicted_organ,
                         "qc_predicted_organ_idx": qc.qc_predicted_organ_idx,
@@ -805,10 +884,23 @@ class BatchQCRadiomicsRunner:
                     "selected_mask_path": selected_paths.get(organ, ""),
                     "volume_ml": round(best.volume_ml, 6),
                     "voxel_count": best.voxel_count,
+                    "image_spacing": best.image_spacing,
+                    "mask_spacing": best.mask_spacing,
+                    "shape_match": best.shape_match,
+                    "spacing_match": best.spacing_match,
+                    "affine_match": best.affine_match,
+                    "geometry_match": best.geometry_match,
+                    "volume_spacing_source": best.volume_spacing_source,
+                    "geometry_warning": best.geometry_warning,
                     "qc_score": qc.qc_score,
                     "qc_predicted_organ": qc.qc_predicted_organ,
                     "qc_error": qc.error,
                 }
+                if not best.geometry_match:
+                    outcome.warnings.append(
+                        f"{organ}: selected {best.tool_name} mask geometry mismatch "
+                        f"({best.geometry_warning or 'see spacing/affine flags'})"
+                    )
             outcome.selected_organs = selected_organs
 
             write_rows_csv(os.path.join(best_dir, "qc_scores.csv"), outcome.candidate_rows)
