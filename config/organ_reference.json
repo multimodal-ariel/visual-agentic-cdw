@@ -70,7 +70,7 @@
       "lung_upper_lobe_left", "lung_lower_lobe_left",
       "lung_upper_lobe_right", "lung_middle_lobe_right", "lung_lower_lobe_right",
       "heart", "aorta", "pulmonary_artery", "trachea", "esophagus",
-      "lung"
+      "lung_left", "lung_right"
     ],
     "abdomen": [
       "liver", "spleen", "kidney_left", "kidney_right", "pancreas",
