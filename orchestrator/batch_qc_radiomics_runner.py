@@ -351,12 +351,9 @@ def output_dir_complete(path: str) -> bool:
 
 def case_outputs_done(case_path: str) -> bool:
     geometric_done = output_dir_complete(os.path.join(case_path, GEOMETRIC_QC_DIRNAME))
-    medsegqc_dir = os.path.join(case_path, MEDSEGQC_DIRNAME)
-    # MedSegQC may be irrelevant for chest-only cases. If the directory exists
-    # and is non-empty, require completion; otherwise geometric completion is
-    # sufficient for done-skipping.
-    medsegqc_required = os.path.isdir(medsegqc_dir) and any(os.scandir(medsegqc_dir))
-    medsegqc_done = (not medsegqc_required) or output_dir_complete(medsegqc_dir)
+    # Require an explicit MedSegQC summary/marker too. Chest-only cases write an
+    # empty marker, so absence means the case still needs the new runner/migration.
+    medsegqc_done = medsegqc_output_done(case_path)
     return geometric_done and medsegqc_done
 
 
