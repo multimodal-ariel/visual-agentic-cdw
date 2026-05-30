@@ -74,7 +74,12 @@ SUPPORTED_CT_ANATOMIES = {
     "whole_body",
     "cardiac",
 }
-SUPPORTED_MRI_ANATOMIES = {"abdomen", "abdomen_pelvis"}
+SUPPORTED_MRI_ANATOMIES = {"abdomen", "abdomen_pelvis", "cardiac", "spine", "pelvis"}
+MRI_TARGET_ORGAN_OVERRIDES = {
+    "cardiac": ["heart"],
+    "spine": ["spine"],
+    "pelvis": ["prostate"],
+}
 CHEST_ANATOMIES = {"chest", "chest_abdomen_pelvis", "whole_body"}
 DEFAULT_SEGMENTATION_STATE = (
     "/data/soumitri/visual-agentic-cdw/logs/pipeline_state_v2.json"
@@ -400,11 +405,14 @@ def filter_case_targets(case_path: str) -> tuple[dict[str, Any], list[str], str]
             return metadata, [], f"unsupported CT anatomy: {anatomy}"
     elif modality == "MRI":
         if anatomy not in SUPPORTED_MRI_ANATOMIES:
-            return metadata, [], f"unsupported MRI anatomy: {anatomy} (only abdominal MRI enabled)"
+            return metadata, [], f"unsupported MRI anatomy: {anatomy} (allowed: abdomen, abdomen_pelvis, cardiac, spine, pelvis)"
     else:
         return metadata, [], f"unsupported modality: {modality}"
 
-    organs = expected_organs_from_metadata(metadata)
+    if modality == "MRI" and anatomy in MRI_TARGET_ORGAN_OVERRIDES:
+        organs = list(MRI_TARGET_ORGAN_OVERRIDES[anatomy])
+    else:
+        organs = expected_organs_from_metadata(metadata)
     if not organs:
         return metadata, [], f"no expected organs for anatomy: {anatomy}"
     return metadata, organs, ""
@@ -1383,6 +1391,27 @@ def run_self_test() -> None:
                 "segmentations_vista3d": {"kidney_left": 5, "liver": 5},
             },
         )
+        cardiac_id, cardiac_path = make_test_case(
+            root,
+            "LUPUS/PT004/20240104/MRI_CARDIAC_MORPH_WO_CONTRAST/TRUE_FISP_AXIAL",
+            {
+                "segmentations_mrseg": {"heart": 4, "liver": 5},
+            },
+        )
+        spine_id, spine_path = make_test_case(
+            root,
+            "LUPUS/PT005/20240105/MRI_CERVICAL_SPINE_WO_CONTRAST/t2_tse_sag",
+            {
+                "segmentations_mrseg": {"spine": 4, "kidney_left": 5},
+            },
+        )
+        pelvis_id, pelvis_path = make_test_case(
+            root,
+            "LUPUS/PT006/20240106/MRI_PELVIS_W_WO_CONTRAST_MSK/T1_AXIAL_PELVIS",
+            {
+                "segmentations_vista3d": {"prostate": 4, "kidney_left": 5},
+            },
+        )
         seg_state = os.path.join(tmp, "pipeline_state_v2.json")
         with open(seg_state, "w") as f:
             json.dump(
@@ -1400,6 +1429,21 @@ def run_self_test() -> None:
                             "error": "",
                         },
                         brain_id: {
+                            "status": "completed",
+                            "tools_run": ["VISTA3D"],
+                            "error": "",
+                        },
+                        cardiac_id: {
+                            "status": "completed",
+                            "tools_run": ["MRSegmentator"],
+                            "error": "",
+                        },
+                        spine_id: {
+                            "status": "completed",
+                            "tools_run": ["MRSegmentator"],
+                            "error": "",
+                        },
+                        pelvis_id: {
                             "status": "completed",
                             "tools_run": ["VISTA3D"],
                             "error": "",
@@ -1423,7 +1467,7 @@ def run_self_test() -> None:
         summary = runner.run()
         geometric_liver = os.path.join(abd_path, GEOMETRIC_QC_DIRNAME, "liver.nii.gz")
         medsegqc_liver = os.path.join(abd_path, MEDSEGQC_DIRNAME, "liver.nii.gz")
-        if summary["completed"] != 2 or summary["skipped"] != 1:
+        if summary["completed"] != 5 or summary["skipped"] != 1:
             raise AssertionError(f"Self-test failed: {summary}")
         if not os.path.isfile(geometric_liver) or not os.path.isfile(medsegqc_liver):
             raise AssertionError("Expected abdomen CT outputs in both filtered folders")
@@ -1439,6 +1483,14 @@ def run_self_test() -> None:
             raise AssertionError("Expected MRSegmentator lung shortcut reason")
         if os.path.isdir(os.path.join(brain_path, GEOMETRIC_QC_DIRNAME)):
             raise AssertionError("Brain MRI should not produce filtered outputs")
+        if not os.path.isfile(os.path.join(cardiac_path, GEOMETRIC_QC_DIRNAME, "heart.nii.gz")):
+            raise AssertionError("Cardiac MRI should keep heart")
+        if os.path.isfile(os.path.join(cardiac_path, GEOMETRIC_QC_DIRNAME, "liver.nii.gz")):
+            raise AssertionError("Cardiac MRI should not keep irrelevant liver")
+        if not os.path.isfile(os.path.join(spine_path, GEOMETRIC_QC_DIRNAME, "spine.nii.gz")):
+            raise AssertionError("Spine MRI should keep spine")
+        if not os.path.isfile(os.path.join(pelvis_path, GEOMETRIC_QC_DIRNAME, "prostate.nii.gz")):
+            raise AssertionError("Pelvis MRI should keep prostate")
         summary2 = runner.run()
         if summary2["completed"] != 0:
             raise AssertionError(f"Second self-test run should be idempotent: {summary2}")
