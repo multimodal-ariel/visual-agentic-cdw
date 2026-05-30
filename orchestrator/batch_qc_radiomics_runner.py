@@ -699,7 +699,11 @@ class BatchQCRadiomicsRunner:
                 total_completed += completed
                 total_failed += failed
                 total_skipped += skipped
+<<<<<<< HEAD
                 self.write_correlation_outputs(max_cases=100)
+=======
+                self.write_correlation_outputs(max_cases=1000)
+>>>>>>> 44104d3 (update filelist + QC + radiomics separate script)
             elif not watch:
                 break
 
