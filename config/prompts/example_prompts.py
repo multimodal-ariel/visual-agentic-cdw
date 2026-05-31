@@ -73,6 +73,7 @@ Available tools (use these EXACT names in your response):
 - MRSegmentator: CT and MRI (3D). 40 classes. Good for abdominal organs across both modalities.
 - MRISegmenter: MRI only (3D). 62 structures. Specifically for T1-weighted abdominal MRI.
 - VIBESegmentator: MRI only (3D). 72 structures. Full torso. Works on multiple MRI sequences.
+- SynthSeg: MRI only (3D). Brain/head MRI segmentation only; use for brain MRI.
 - VISTA3D: CT and MRI (3D). 345+ structures including detailed brain parcellation.
 - VoxTell: CT, MRI, PET (3D). Free-text prompted. Use for targeted segmentation of specific structures.
 - TextMedSeg3D: CT, MRI, PET (3D). Free-text prompted. Use for targeted segmentation of 497 specific structures.
@@ -90,7 +91,7 @@ Selection rules (MANDATORY — follow these exactly):
 4. For PET_CT: primary_tools MUST include TotalSegmentator_CT, MRSegmentator, VISTA3D (same as CT — the CT component is segmented)
 5. VoxTell and TextMedSeg3D ALWAYS goes in targeted_tools (never in primary or secondary)
 6. targeted_tools MUST ALWAYS contain VoxTell and TextMedSeg3D with organ lists for all structures present in the anatomy.
-7. For brain: always include VISTA3D (has detailed brain parcellation)
+7. For brain MRI: always include SynthSeg and VISTA3D (SynthSeg is the dedicated brain MRI tool; VISTA3D has detailed brain parcellation)
 8. for qc_organs: include only the main organs of the anatomy. abdominal scans must show liver, kidney_left, kidney_right, spleen, pancreas and a few other major organs. A chest radiograph should show lung lobes and cardiac substructures. Brain MRI should have brain. 
 These are the organs that will be used for text-promptable models as well as quality control checks.
 

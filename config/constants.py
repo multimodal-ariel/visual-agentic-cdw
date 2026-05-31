@@ -118,6 +118,7 @@ TOOL_OUTPUT_DIRS = {
     "MRSegmentator":        "segmentations_mrseg",
     "MRISegmenter":         "segmentations_mrisegmenter",
     "VIBESegmentator":      "segmentations_vibeseg",
+    "SynthSeg":             "segmentations_synthseg",
     # Text-promptable tools
     "VoxTell":              "segmentations_voxtell",
     "BiomedParse3D":        "segmentations_biomedparse3d",
@@ -139,6 +140,7 @@ TOOL_CONDA_ENVS = {
     "MRSegmentator":        "cdw_mrseg",
     "MRISegmenter":         "cdw_mriseg",
     "VIBESegmentator":      "cdw_vibeseg",
+    "SynthSeg":             "cdw_synthseg",
     # Text-promptable tools
     "VoxTell":              "cdw_voxtell",
     "BiomedParse3D":        "cdw_biomedparse3d",

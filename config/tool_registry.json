@@ -87,6 +87,24 @@
       "reference": "Graf et al., European Radiology, 2025",
       "github": "https://github.com/robert-graf/VIBESegmentator",
       "version_verified": "latest (poetry-based, TotalVibeSegmentator package)"
+    },
+    {
+      "name": "SynthSeg",
+      "class": "tools.synthseg.SynthSegTool",
+      "description": "Contrast-agnostic brain MRI segmentation. SynthSeg outputs a 1mm isotropic multilabel brain segmentation; wrapper resamples labels back to image_nifti.nii.gz space and writes canonical per-structure masks plus a combined brain mask.",
+      "supported_modalities": ["MRI"],
+      "supported_anatomies": ["head"],
+      "supports_2d": false,
+      "supports_3d": true,
+      "num_structures": 32,
+      "cli_command": "python external/SynthSeg/scripts/commands/SynthSeg_predict.py --i {input} --o {output}/synthseg_raw_1mm.nii.gz --robust",
+      "output_dir": "segmentations_synthseg",
+      "output_format": "multilabel_nifti_resampled_to_per_organ",
+      "conda_env": "cdw_synthseg",
+      "notes": "Brain/head MRI only. Set SYNTHSEG_DIR if the clone is not at external/SynthSeg. Wrapper uses --robust by default and nearest-neighbour resampling to restore the input image grid.",
+      "reference": "Billot et al., Medical Image Analysis 2023; PNAS 2023",
+      "github": "https://github.com/BBillot/SynthSeg",
+      "version_verified": "upstream master CLI SynthSeg_predict.py"
     }
   ],
 
