@@ -263,10 +263,11 @@ class BatchRunner:
             self._append_csv(result)
 
             logger.info(
-                "[%s] %s in %.1fs (tools: %s, QC: %s)",
+                "[%s] %s in %.1fs (tools: %s, QC: %s)%s",
                 case_id, result.status, result.total_time_s,
                 ", ".join(result.selected_tools),
                 result.qc_report.get("overall_severity", "N/A"),
+                f" error={result.error}" if result.error else "",
             )
 
             return result

@@ -206,12 +206,13 @@ class SynthSegTool(BaseSegmentationTool):
                 runtime_seconds=time.time() - t0,
             )
         except subprocess.CalledProcessError as exc:
+            detail = self._command_error_tail(exc)
             return ToolOutput(
                 tool_name=self.name,
                 case_path=inp.case_path,
                 seg_dir=output_dir,
                 success=False,
-                error=f"SynthSeg failed (exit {exc.returncode})",
+                error=f"SynthSeg failed (exit {exc.returncode}){detail}",
                 runtime_seconds=time.time() - t0,
             )
 
@@ -292,6 +293,18 @@ class SynthSegTool(BaseSegmentationTool):
             except Exception:
                 stats[key] = []
         return stats
+
+    @staticmethod
+    def _command_error_tail(exc: subprocess.CalledProcessError, max_chars: int = 1200) -> str:
+        text = "\n".join(
+            part.strip()
+            for part in (getattr(exc, "stderr", "") or "", getattr(exc, "output", "") or "")
+            if part and part.strip()
+        )
+        if not text:
+            return ""
+        text = text[-max_chars:]
+        return f": {text}"
 
     def _ensure_upstream_model_files(self) -> None:
         models_dir = os.path.join(self.synthseg_dir, "models")

@@ -172,8 +172,9 @@ class BaseSegmentationTool(ABC):
                 check=True,
                 cwd=cwd,
                 env=env,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
             )
 
         # Spawn in a new process group so we can SIGKILL the whole tree on
@@ -185,12 +186,13 @@ class BaseSegmentationTool(ABC):
             full_cmd,
             cwd=cwd,
             env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
             start_new_session=True,
         )
         try:
-            proc.wait(timeout=timeout)
+            stdout, stderr = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
             try:
                 os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
@@ -204,8 +206,13 @@ class BaseSegmentationTool(ABC):
             raise subprocess.TimeoutExpired(full_cmd, timeout) from None
 
         if proc.returncode != 0:
-            raise subprocess.CalledProcessError(proc.returncode, full_cmd)
-        return subprocess.CompletedProcess(full_cmd, proc.returncode)
+            raise subprocess.CalledProcessError(
+                proc.returncode,
+                full_cmd,
+                output=stdout,
+                stderr=stderr,
+            )
+        return subprocess.CompletedProcess(full_cmd, proc.returncode, stdout=stdout, stderr=stderr)
 
     def postprocess(self, mask: np.ndarray, organ: str, config: Dict) -> np.ndarray:
         """Apply organ-specific postprocessing chain to a binary mask array."""
