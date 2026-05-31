@@ -84,6 +84,10 @@ def test_synthseg_head_ct_passes_ct_flag(tmp_path, monkeypatch):
     runner = synthseg_dir / "scripts" / "commands" / "SynthSeg_predict.py"
     runner.parent.mkdir(parents=True)
     runner.write_text("# fake runner\n")
+    labels_dir = synthseg_dir / "data" / "labels_classes_priors"
+    labels_dir.mkdir(parents=True)
+    for label_file in SynthSegTool.REQUIRED_LABEL_FILES:
+        np.save(labels_dir / label_file, np.array([0, 1], dtype=np.int16))
 
     ckpt_dir = tmp_path / "checkpoints"
     ckpt_dir.mkdir()

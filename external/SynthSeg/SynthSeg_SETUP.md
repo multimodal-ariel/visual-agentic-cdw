@@ -62,6 +62,37 @@ export SYNTHSEG_QC_CHECKPOINT=/path/to/synthseg_qc_2.0.h5
 export SYNTHSEG_PARC_CHECKPOINT=/path/to/synthseg_parc_2.0.h5
 ```
 
+## Required Label/Prior Data
+
+The upstream CLI also requires small `.npy` files under:
+
+```text
+external/SynthSeg/data/labels_classes_priors/
+```
+
+If this folder is missing, download the required files from GitHub:
+
+```bash
+mkdir -p external/SynthSeg/data/labels_classes_priors
+cd external/SynthSeg/data/labels_classes_priors
+
+for f in \
+  synthseg_segmentation_labels_2.0.npy \
+  synthseg_denoiser_labels_2.0.npy \
+  synthseg_qc_labels_2.0.npy \
+  synthseg_segmentation_names_2.0.npy \
+  synthseg_qc_names_2.0.npy \
+  synthseg_topological_classes_2.0.npy \
+  synthseg_parcellation_labels.npy \
+  synthseg_parcellation_names.npy
+do
+  wget -nc "https://raw.githubusercontent.com/BBillot/SynthSeg/master/data/labels_classes_priors/${f}"
+done
+```
+
+The parcellation files are optional unless running the wrapper with
+`parc=True`, but downloading all eight keeps the install complete.
+
 ## Wrapper Contract
 
 The CDW wrapper calls:

@@ -78,6 +78,18 @@ class SynthSegTool(BaseSegmentationTool):
         58: "accumbens_right",
         60: "ventral_dc_right",
     }
+    REQUIRED_LABEL_FILES = (
+        "synthseg_segmentation_labels_2.0.npy",
+        "synthseg_denoiser_labels_2.0.npy",
+        "synthseg_qc_labels_2.0.npy",
+        "synthseg_segmentation_names_2.0.npy",
+        "synthseg_qc_names_2.0.npy",
+        "synthseg_topological_classes_2.0.npy",
+    )
+    PARC_LABEL_FILES = (
+        "synthseg_parcellation_labels.npy",
+        "synthseg_parcellation_names.npy",
+    )
 
     def __init__(
         self,
@@ -156,6 +168,7 @@ class SynthSegTool(BaseSegmentationTool):
 
         try:
             self._ensure_upstream_model_files()
+            self._ensure_upstream_label_files()
         except FileNotFoundError as exc:
             return ToolOutput(
                 tool_name=self.name,
@@ -331,6 +344,19 @@ class SynthSegTool(BaseSegmentationTool):
                 os.symlink(os.path.abspath(source), destination)
             except OSError:
                 shutil.copy2(source, destination)
+
+    def _ensure_upstream_label_files(self) -> None:
+        labels_dir = os.path.join(self.synthseg_dir, "data", "labels_classes_priors")
+        required = list(self.REQUIRED_LABEL_FILES)
+        if self.parc:
+            required.extend(self.PARC_LABEL_FILES)
+        missing = [name for name in required if not os.path.isfile(os.path.join(labels_dir, name))]
+        if missing:
+            raise FileNotFoundError(
+                "SynthSeg label/prior data files are missing from "
+                f"{labels_dir}: {missing}. Download data/labels_classes_priors "
+                "from https://github.com/BBillot/SynthSeg before running SynthSeg."
+            )
 
     def _dry_run(self, inp: ToolInput, output_dir: str, t0: float) -> ToolOutput:
         os.makedirs(output_dir, exist_ok=True)
