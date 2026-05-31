@@ -39,7 +39,7 @@ from tools.synthseg import SynthSegTool
 
 
 MNI_URL = "https://www.bic.mni.mcgill.ca/~vfonov/icbm/2009/mni_icbm152_nlin_sym_09a_nifti.zip"
-MNI_T1_NAME = "mni_icbm152_t1_tal_nlin_sym_09a.nii.gz"
+MNI_T1_HINTS = ("t1", "nlin", "sym", "09a")
 
 
 def download_mni_template(work_dir: Path) -> Path:
@@ -51,10 +51,27 @@ def download_mni_template(work_dir: Path) -> Path:
     if not extract_dir.is_dir():
         with zipfile.ZipFile(archive) as zf:
             zf.extractall(extract_dir)
-    matches = list(extract_dir.rglob(MNI_T1_NAME))
+    matches = [
+        path
+        for path in extract_dir.rglob("*.nii*")
+        if all(hint in path.name.lower() for hint in MNI_T1_HINTS)
+        and "mask" not in path.name.lower()
+        and "eye" not in path.name.lower()
+        and "face" not in path.name.lower()
+    ]
     if not matches:
-        raise FileNotFoundError(f"Could not find {MNI_T1_NAME} inside {archive}")
-    return matches[0]
+        matches = [
+            path
+            for path in extract_dir.rglob("*.nii*")
+            if "t1" in path.name.lower()
+            and "mask" not in path.name.lower()
+            and "eye" not in path.name.lower()
+            and "face" not in path.name.lower()
+        ]
+    if not matches:
+        available = [str(path.relative_to(extract_dir)) for path in extract_dir.rglob("*.nii*")]
+        raise FileNotFoundError(f"Could not find a T1 NIfTI inside {archive}; available={available[:20]}")
+    return sorted(matches, key=lambda p: (len(p.name), p.name))[0]
 
 
 def run_command(cmd: list[str], *, cwd: Path | None, timeout: int | None) -> dict[str, Any]:
