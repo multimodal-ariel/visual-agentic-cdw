@@ -100,6 +100,7 @@ class SynthSegTool(BaseSegmentationTool):
         segmentation_checkpoint: str | None = None,
         qc_checkpoint: str | None = None,
         parc_checkpoint: str | None = None,
+        write_qc: bool | None = None,
     ):
         self.dry_run = dry_run
         if synthseg_dir:
@@ -114,6 +115,9 @@ class SynthSegTool(BaseSegmentationTool):
             robust = os.environ.get("SYNTHSEG_ROBUST", "1").strip().lower() not in {"0", "false", "no"}
         self.robust = robust
         self.parc = parc
+        if write_qc is None:
+            write_qc = os.environ.get("SYNTHSEG_WRITE_QC", "0").strip().lower() in {"1", "true", "yes"}
+        self.write_qc = write_qc
         default_seg_ckpt = SYNTHSEG_ROBUST_CHECKPOINT if self.robust else SYNTHSEG_STANDARD_CHECKPOINT
         self.segmentation_checkpoint = (
             segmentation_checkpoint
@@ -194,9 +198,9 @@ class SynthSegTool(BaseSegmentationTool):
             raw_seg,
             "--vol",
             volumes_csv,
-            "--qc",
-            qc_csv,
         ]
+        if self.write_qc:
+            cmd.extend(["--qc", qc_csv])
         if self.robust:
             cmd.append("--robust")
         if self.parc:
@@ -209,6 +213,7 @@ class SynthSegTool(BaseSegmentationTool):
         gpu_id = self._parse_gpu_id(inp.device)
         try:
             self._run_in_env(cmd, cwd=self.synthseg_dir, gpu_id=gpu_id, timeout=inp.timeout_s)
+            synthseg_warning = ""
         except subprocess.TimeoutExpired:
             return ToolOutput(
                 tool_name=self.name,
@@ -220,14 +225,16 @@ class SynthSegTool(BaseSegmentationTool):
             )
         except subprocess.CalledProcessError as exc:
             detail = self._command_error_tail(exc)
-            return ToolOutput(
-                tool_name=self.name,
-                case_path=inp.case_path,
-                seg_dir=output_dir,
-                success=False,
-                error=f"SynthSeg failed (exit {exc.returncode}){detail}",
-                runtime_seconds=time.time() - t0,
-            )
+            if not os.path.isfile(raw_seg):
+                return ToolOutput(
+                    tool_name=self.name,
+                    case_path=inp.case_path,
+                    seg_dir=output_dir,
+                    success=False,
+                    error=f"SynthSeg failed (exit {exc.returncode}){detail}",
+                    runtime_seconds=time.time() - t0,
+                )
+            synthseg_warning = f"SynthSeg exited {exc.returncode} after writing raw segmentation{detail}"
 
         if not os.path.isfile(raw_seg):
             return ToolOutput(
@@ -261,7 +268,10 @@ class SynthSegTool(BaseSegmentationTool):
             case_path=inp.case_path,
             seg_dir=output_dir,
             organs_segmented=organs_segmented,
-            statistics=self._read_synthseg_stats(volumes_csv, qc_csv),
+            statistics={
+                **self._read_synthseg_stats(volumes_csv, qc_csv),
+                **({"warning": synthseg_warning} if synthseg_warning else {}),
+            },
             success=len(organs_segmented) > 0,
             error="" if organs_segmented else "SynthSeg produced no non-empty labels.",
             runtime_seconds=time.time() - t0,
@@ -325,8 +335,9 @@ class SynthSegTool(BaseSegmentationTool):
 
         required = {
             "synthseg_robust_2.0.h5" if self.robust else "synthseg_2.0.h5": self.segmentation_checkpoint,
-            "synthseg_qc_2.0.h5": self.qc_checkpoint,
         }
+        if self.write_qc:
+            required["synthseg_qc_2.0.h5"] = self.qc_checkpoint
         if self.parc:
             required["synthseg_parc_2.0.h5"] = self.parc_checkpoint
 
