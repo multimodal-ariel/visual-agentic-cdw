@@ -32,10 +32,15 @@ cd external/SynthSeg
 python setup.py install
 ```
 
-Download the upstream model files from the UCL Dropbox link in the SynthSeg
-README:
+Download the upstream model files from the SynthSeg model link. The original
+README points to a UCL Dropbox/SharePoint folder:
 
 https://liveuclac-my.sharepoint.com/:f:/g/personal/rmappmb_ucl_ac_uk/EtlNnulBSUtAvOP6S99KcAIBYzze7jTPsmFk2_iHqKDjEw
+
+If that link is unavailable, the upstream author later re-uploaded the models
+at this MIT SharePoint link:
+
+https://mitprod-my.sharepoint.com/:u:/g/personal/bbillot_mit_edu/Ebqxo6YgUmBJkOML0m8NSXgBrhaHG7iqClFXRXPinS6FGw
 
 Then keep the canonical copies under the repo checkpoint tree:
 

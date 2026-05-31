@@ -3,7 +3,7 @@
   "output_paths": 6,
   "per_modality_requested": 3,
   "candidate_counts": {
-    "CT": 1063,
+    "CT": 766,
     "MRI": 3950
   },
   "selected_counts": {
@@ -18,7 +18,8 @@
   "rejection_counts": {
     "not_head_ct_mri": 18174,
     "not_volume": 2425,
-    "non_diagnostic_series": 971,
+    "non_diagnostic_series": 1010,
+    "unsuitable_ct_head_kernel": 258,
     "bad_path": 2
   },
   "selected": [
@@ -58,8 +59,8 @@
         512
       ],
       "study": "CT_BRAIN_WO_CONTRAST",
-      "series": "BONE",
-      "path": "/data/RAD/LUPUS/02A640F3A6085CFD06F876A9D502916C/20131225/CT_BRAIN_WO_CONTRAST/BONE"
+      "series": "WITHOUT",
+      "path": "/data/RAD/LUPUS/02A640F3A6085CFD06F876A9D502916C/20131225/CT_BRAIN_WO_CONTRAST/WITHOUT"
     },
     {
       "modality": "MRI",
@@ -77,15 +78,15 @@
     {
       "modality": "CT",
       "cohort": "RHEUM",
-      "patient": "01BFD5E958EC0050BE7379486CECD85A",
+      "patient": "0278C61FA040164C57BFB56818D1C775",
       "shape": [
-        56,
+        28,
         512,
         512
       ],
       "study": "CT_HEAD_WO_CONTRAST",
-      "series": "HEAD_WO___3_0__Hr38__2",
-      "path": "/data/RAD/RHEUM/01BFD5E958EC0050BE7379486CECD85A/20220718/CT_HEAD_WO_CONTRAST/HEAD_WO___3_0__Hr38__2"
+      "series": "STANDARD_HEAD",
+      "path": "/data/RAD/RHEUM/0278C61FA040164C57BFB56818D1C775/20230625/CT_HEAD_WO_CONTRAST/STANDARD_HEAD"
     },
     {
       "modality": "MRI",

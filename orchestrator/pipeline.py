@@ -293,6 +293,10 @@ class CasePipeline:
             seg_dirs = self._step_segmentation(
                 case_path, image_path, result.metadata, result
             )
+            if not any(output.get("success") for output in result.tool_outputs):
+                result.status = "failed"
+                result.error = "; ".join(result.warnings[-3:]) or "No selected segmentation tool succeeded"
+                return result
 
             '''[May-11-2026: Disabling this super complicated QC checking. Radiomics will be done offline separately.]'''
 

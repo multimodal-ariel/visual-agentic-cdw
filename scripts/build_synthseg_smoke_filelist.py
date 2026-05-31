@@ -35,6 +35,7 @@ NON_DIAGNOSTIC_CONTAINS = (
     "VRT",
     "VOLUMERENDER",
     "PROJECTION",
+    "STRAIGHTEN",
 )
 MRI_SERIES_HINTS = (
     "MPRAGE",
@@ -52,8 +53,8 @@ CT_SERIES_HINTS = (
     "BRAIN",
     "STANDARD",
     "SOFT",
-    "BONE",
 )
+CT_SERIES_EXCLUDE_CONTAINS = ("BONE", "Hr", "J70", "H70")
 
 
 def is_volume_shape(shape: Any) -> bool:
@@ -104,6 +105,11 @@ def is_non_diagnostic_series(series: str) -> bool:
     return False
 
 
+def is_unsuitable_head_ct_series(series: str) -> bool:
+    series_u = series.upper()
+    return any(token.upper() in series_u for token in CT_SERIES_EXCLUDE_CONTAINS)
+
+
 def series_priority(modality: str, series: str) -> tuple[int, str]:
     series_u = series.upper()
     hints = MRI_SERIES_HINTS if modality == "MRI" else CT_SERIES_HINTS
@@ -139,6 +145,9 @@ def build_smoke_list(entries: list[Any], per_modality: int) -> tuple[list[str], 
             continue
         if is_non_diagnostic_series(series):
             rejection_counts["non_diagnostic_series"] += 1
+            continue
+        if modality == "CT" and is_unsuitable_head_ct_series(series):
+            rejection_counts["unsuitable_ct_head_kernel"] += 1
             continue
         candidates[modality].append(
             {
