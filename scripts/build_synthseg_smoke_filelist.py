@@ -119,7 +119,12 @@ def series_priority(modality: str, series: str) -> tuple[int, str]:
     return len(hints), series_u
 
 
-def build_smoke_list(entries: list[Any], per_modality: int) -> tuple[list[str], dict[str, Any]]:
+def build_smoke_list(
+    entries: list[Any],
+    *,
+    ct_count: int,
+    mri_count: int,
+) -> tuple[list[str], dict[str, Any]]:
     candidates: dict[str, list[dict[str, Any]]] = defaultdict(list)
     rejection_counts: Counter[str] = Counter()
 
@@ -165,6 +170,7 @@ def build_smoke_list(entries: list[Any], per_modality: int) -> tuple[list[str], 
 
     selected: list[dict[str, Any]] = []
     for modality in MODALITY_ORDER:
+        target_count = ct_count if modality == "CT" else mri_count
         seen_patients: set[tuple[str, str]] = set()
         by_cohort = {
             cohort: sorted(
@@ -174,7 +180,7 @@ def build_smoke_list(entries: list[Any], per_modality: int) -> tuple[list[str], 
             for cohort in COHORT_ORDER
         }
         cohort_offsets = {cohort: 0 for cohort in COHORT_ORDER}
-        while sum(1 for x in selected if x["modality"] == modality) < per_modality:
+        while sum(1 for x in selected if x["modality"] == modality) < target_count:
             added_this_round = False
             for cohort in COHORT_ORDER:
                 rows = by_cohort[cohort]
@@ -188,7 +194,7 @@ def build_smoke_list(entries: list[Any], per_modality: int) -> tuple[list[str], 
                     seen_patients.add(patient_key)
                     added_this_round = True
                     break
-                if sum(1 for x in selected if x["modality"] == modality) >= per_modality:
+                if sum(1 for x in selected if x["modality"] == modality) >= target_count:
                     break
             if not added_this_round:
                 break
@@ -196,7 +202,7 @@ def build_smoke_list(entries: list[Any], per_modality: int) -> tuple[list[str], 
     # Interleave CT/MRI for quick visual feedback in logs.
     by_modality = {mod: [row for row in selected if row["modality"] == mod] for mod in MODALITY_ORDER}
     ordered: list[dict[str, Any]] = []
-    for idx in range(per_modality):
+    for idx in range(max(ct_count, mri_count)):
         for modality in MODALITY_ORDER:
             rows = by_modality.get(modality, [])
             if idx < len(rows):
@@ -205,7 +211,7 @@ def build_smoke_list(entries: list[Any], per_modality: int) -> tuple[list[str], 
     summary = {
         "input_entries": len(entries),
         "output_paths": len(ordered),
-        "per_modality_requested": per_modality,
+        "requested": {"CT": ct_count, "MRI": mri_count},
         "candidate_counts": {mod: len(candidates.get(mod, [])) for mod in MODALITY_ORDER},
         "selected_counts": dict(Counter(row["modality"] for row in ordered)),
         "selected_by_cohort": dict(Counter(row["cohort"] for row in ordered)),
@@ -231,7 +237,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", default=str(DEFAULT_INPUT), help="Path to 3d_scans_list.json")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Output JSON filelist path")
     parser.add_argument("--summary", default=str(DEFAULT_SUMMARY), help="Output summary JSON path")
-    parser.add_argument("--per-modality", type=int, default=3, help="Number of CT and MRI cases to select")
+    parser.add_argument(
+        "--per-modality",
+        type=int,
+        default=15,
+        help="Number of CT and MRI cases to select when --ct-count/--mri-count are not set",
+    )
+    parser.add_argument("--ct-count", type=int, default=None, help="Number of CT head cases to select")
+    parser.add_argument("--mri-count", type=int, default=None, help="Number of MRI head cases to select")
     return parser.parse_args()
 
 
@@ -240,7 +253,9 @@ def main() -> int:
     with Path(args.input).open("r", encoding="utf-8") as f:
         entries = json.load(f)
 
-    paths, summary = build_smoke_list(entries, per_modality=args.per_modality)
+    ct_count = args.ct_count if args.ct_count is not None else args.per_modality
+    mri_count = args.mri_count if args.mri_count is not None else args.per_modality
+    paths, summary = build_smoke_list(entries, ct_count=ct_count, mri_count=mri_count)
     if not paths:
         raise SystemExit("No SynthSeg smoke-test candidates found.")
 
@@ -265,7 +280,7 @@ def main() -> int:
         f"--filelist {run_filelist} "
         "--state-file logs/synthseg_smoke_state.json "
         "--output-csv logs/synthseg_smoke_results.csv "
-        "--gpus 0 --workers 1 --no-llm --tools SynthSeg --tool-timeout 900"
+        "--gpus 0,1,2,3,4,5,6,7 --workers 8 --no-llm --tools SynthSeg --tool-timeout 900"
     )
     return 0
 

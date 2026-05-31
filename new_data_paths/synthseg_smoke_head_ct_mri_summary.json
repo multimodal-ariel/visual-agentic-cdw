@@ -1,19 +1,22 @@
 {
   "input_entries": 26585,
-  "output_paths": 6,
-  "per_modality_requested": 3,
+  "output_paths": 30,
+  "requested": {
+    "CT": 15,
+    "MRI": 15
+  },
   "candidate_counts": {
     "CT": 766,
     "MRI": 3950
   },
   "selected_counts": {
-    "CT": 3,
-    "MRI": 3
+    "CT": 15,
+    "MRI": 15
   },
   "selected_by_cohort": {
-    "CONTR": 2,
-    "LUPUS": 2,
-    "RHEUM": 2
+    "CONTR": 10,
+    "LUPUS": 10,
+    "RHEUM": 10
   },
   "rejection_counts": {
     "not_head_ct_mri": 18174,
@@ -100,6 +103,318 @@
       "study": "MRI_BRAIN_WO_CONTRAST",
       "series": "AX_T1_FLAIR",
       "path": "/data/RAD/RHEUM/04EE595FEEA5156D1AAE6ECF75B4551A/20170903/MRI_BRAIN_WO_CONTRAST/AX_T1_FLAIR"
+    },
+    {
+      "modality": "CT",
+      "cohort": "CONTR",
+      "patient": "1515BE2AF2B97D69426537C9CD3B9F4A",
+      "shape": [
+        72,
+        512,
+        512
+      ],
+      "study": "CT_HEAD_WO_CONTRAST",
+      "series": "HEAD_2_5_X_2_5-SEND",
+      "path": "/data/RAD/CONTR/1515BE2AF2B97D69426537C9CD3B9F4A/20230323/CT_HEAD_WO_CONTRAST/HEAD_2_5_X_2_5-SEND"
+    },
+    {
+      "modality": "MRI",
+      "cohort": "CONTR",
+      "patient": "15FEC42AF8EC1ECFCF9C002DD436636D",
+      "shape": [
+        26,
+        256,
+        256
+      ],
+      "study": "MRI_BRAIN_W_O_CONT_W_STEM",
+      "series": "FLAIR_AX",
+      "path": "/data/RAD/CONTR/15FEC42AF8EC1ECFCF9C002DD436636D/20050814/MRI_BRAIN_W_O_CONT_W_STEM/FLAIR_AX"
+    },
+    {
+      "modality": "CT",
+      "cohort": "LUPUS",
+      "patient": "043A021B2E92D390FD52BE6F729DE47F",
+      "shape": [
+        32,
+        512,
+        512
+      ],
+      "study": "CT_HEAD_W_WO_CONTRAST",
+      "series": "HEAD_WITH",
+      "path": "/data/RAD/LUPUS/043A021B2E92D390FD52BE6F729DE47F/20230311/CT_HEAD_W_WO_CONTRAST/HEAD_WITH"
+    },
+    {
+      "modality": "MRI",
+      "cohort": "LUPUS",
+      "patient": "04AE802F3D5012A9E30EA3E882463A4C",
+      "shape": [
+        192,
+        256,
+        208
+      ],
+      "study": "MRI_BRAIN_W_WO_CONTRAST",
+      "series": "t1_mprage_tra_p2_iso_1_0",
+      "path": "/data/RAD/LUPUS/04AE802F3D5012A9E30EA3E882463A4C/20220923/MRI_BRAIN_W_WO_CONTRAST/t1_mprage_tra_p2_iso_1_0"
+    },
+    {
+      "modality": "CT",
+      "cohort": "RHEUM",
+      "patient": "09B731AFCDA5F120D449C56D6EF4B4F5",
+      "shape": [
+        30,
+        512,
+        512
+      ],
+      "study": "CT_HEAD_WO_CONTRAST",
+      "series": "HEAD_W_O",
+      "path": "/data/RAD/RHEUM/09B731AFCDA5F120D449C56D6EF4B4F5/20250309/CT_HEAD_WO_CONTRAST/HEAD_W_O"
+    },
+    {
+      "modality": "MRI",
+      "cohort": "RHEUM",
+      "patient": "09B731AFCDA5F120D449C56D6EF4B4F5",
+      "shape": [
+        23,
+        512,
+        512
+      ],
+      "study": "MRI_BRAIN_W_WO_CONTRAST",
+      "series": "FLAIR_AX_FS",
+      "path": "/data/RAD/RHEUM/09B731AFCDA5F120D449C56D6EF4B4F5/20250822/MRI_BRAIN_W_WO_CONTRAST/FLAIR_AX_FS"
+    },
+    {
+      "modality": "CT",
+      "cohort": "CONTR",
+      "patient": "21535B1FBFC1037CA5E036E84706A895",
+      "shape": [
+        79,
+        512,
+        512
+      ],
+      "study": "CT_HEAD_WO_CONTRAST",
+      "series": "Head_2mm_Axial_BW",
+      "path": "/data/RAD/CONTR/21535B1FBFC1037CA5E036E84706A895/20240805/CT_HEAD_WO_CONTRAST/Head_2mm_Axial_BW"
+    },
+    {
+      "modality": "MRI",
+      "cohort": "CONTR",
+      "patient": "21535B1FBFC1037CA5E036E84706A895",
+      "shape": [
+        24,
+        256,
+        256
+      ],
+      "study": "MRI_BRAIN_WO_CON_W_STEM",
+      "series": "FLAIR_AX_BLADE",
+      "path": "/data/RAD/CONTR/21535B1FBFC1037CA5E036E84706A895/20130327/MRI_BRAIN_WO_CON_W_STEM/FLAIR_AX_BLADE"
+    },
+    {
+      "modality": "CT",
+      "cohort": "LUPUS",
+      "patient": "0594E6EF9590CFBEE9744707C32A35DF",
+      "shape": [
+        32,
+        512,
+        512
+      ],
+      "study": "CT_HEAD_FACIAL_BONES_COMBO_WO_CONTR",
+      "series": "HEAD_W_O",
+      "path": "/data/RAD/LUPUS/0594E6EF9590CFBEE9744707C32A35DF/20160604/CT_HEAD_FACIAL_BONES_COMBO_WO_CONTR/HEAD_W_O"
+    },
+    {
+      "modality": "MRI",
+      "cohort": "LUPUS",
+      "patient": "0610C281695825F5F683E57757DE2014",
+      "shape": [
+        192,
+        256,
+        224
+      ],
+      "study": "MRI_BRAIN_W_WO_CONTRAST",
+      "series": "t1_mprage_tra_p2_iso_1_0_POST",
+      "path": "/data/RAD/LUPUS/0610C281695825F5F683E57757DE2014/20240727/MRI_BRAIN_W_WO_CONTRAST/t1_mprage_tra_p2_iso_1_0_POST"
+    },
+    {
+      "modality": "CT",
+      "cohort": "RHEUM",
+      "patient": "0F2D54AF43B4C12BA2A9C39E9A34AECE",
+      "shape": [
+        64,
+        512,
+        512
+      ],
+      "study": "CT_HEAD_WO_CONTRAST",
+      "series": "HEAD_2_5_X_2_5-SEND",
+      "path": "/data/RAD/RHEUM/0F2D54AF43B4C12BA2A9C39E9A34AECE/20251212/CT_HEAD_WO_CONTRAST/HEAD_2_5_X_2_5-SEND"
+    },
+    {
+      "modality": "MRI",
+      "cohort": "RHEUM",
+      "patient": "0CE170B46E3B0A58404490E325C517F4",
+      "shape": [
+        27,
+        256,
+        192
+      ],
+      "study": "MRI_BRAIN_W_WO_CONTRAST",
+      "series": "T1_COR_SE_FLOWCOMP",
+      "path": "/data/RAD/RHEUM/0CE170B46E3B0A58404490E325C517F4/20160626/MRI_BRAIN_W_WO_CONTRAST/T1_COR_SE_FLOWCOMP"
+    },
+    {
+      "modality": "CT",
+      "cohort": "CONTR",
+      "patient": "371057963A6160FCD964F27EBF80C439",
+      "shape": [
+        71,
+        512,
+        512
+      ],
+      "study": "CT_HEAD_WO_CONTRAST",
+      "series": "AX_HEAD_STND_2_5X2_5",
+      "path": "/data/RAD/CONTR/371057963A6160FCD964F27EBF80C439/20240103/CT_HEAD_WO_CONTRAST/AX_HEAD_STND_2_5X2_5"
+    },
+    {
+      "modality": "MRI",
+      "cohort": "CONTR",
+      "patient": "2A7401E56AB3D4A81E541639F774D167",
+      "shape": [
+        29,
+        512,
+        448
+      ],
+      "study": "MRI_BRAIN_W_WO_CONTRAST",
+      "series": "FLAIR_COR",
+      "path": "/data/RAD/CONTR/2A7401E56AB3D4A81E541639F774D167/20250111/MRI_BRAIN_W_WO_CONTRAST/FLAIR_COR"
+    },
+    {
+      "modality": "CT",
+      "cohort": "LUPUS",
+      "patient": "063413880D0E047824A58F0AC59E2963",
+      "shape": [
+        33,
+        512,
+        512
+      ],
+      "study": "CT_HEAD_WO_CONTRAST",
+      "series": "Head__BW",
+      "path": "/data/RAD/LUPUS/063413880D0E047824A58F0AC59E2963/20160913/CT_HEAD_WO_CONTRAST/Head__BW"
+    },
+    {
+      "modality": "MRI",
+      "cohort": "LUPUS",
+      "patient": "072F061C8CA35E621B39373CD6815C1C",
+      "shape": [
+        22,
+        512,
+        448
+      ],
+      "study": "MRI_BRAIN_W_WO_CONTRAST",
+      "series": "FLAIR_AX_FS",
+      "path": "/data/RAD/LUPUS/072F061C8CA35E621B39373CD6815C1C/20240428/MRI_BRAIN_W_WO_CONTRAST/FLAIR_AX_FS"
+    },
+    {
+      "modality": "CT",
+      "cohort": "RHEUM",
+      "patient": "13A068A56750135AC0317489550C16A7",
+      "shape": [
+        67,
+        512,
+        724
+      ],
+      "study": "CT_HEAD_WO_CONTRAST",
+      "series": "CORONAL",
+      "path": "/data/RAD/RHEUM/13A068A56750135AC0317489550C16A7/20171030/CT_HEAD_WO_CONTRAST/CORONAL"
+    },
+    {
+      "modality": "MRI",
+      "cohort": "RHEUM",
+      "patient": "142B03B58C5786F4EE17FE8B59011FBF",
+      "shape": [
+        26,
+        256,
+        216
+      ],
+      "study": "MRI_BRAIN_W_WO_CONTRAST",
+      "series": "AX_T2_FLAIR",
+      "path": "/data/RAD/RHEUM/142B03B58C5786F4EE17FE8B59011FBF/20230612/MRI_BRAIN_W_WO_CONTRAST/AX_T2_FLAIR"
+    },
+    {
+      "modality": "CT",
+      "cohort": "CONTR",
+      "patient": "4FBFF91EE76F0708933FD2737E3B3E21",
+      "shape": [
+        93,
+        512,
+        512
+      ],
+      "study": "CT_HEAD_WO_CONTRAST",
+      "series": "Head_2mm_Axial_BW",
+      "path": "/data/RAD/CONTR/4FBFF91EE76F0708933FD2737E3B3E21/20251203/CT_HEAD_WO_CONTRAST/Head_2mm_Axial_BW"
+    },
+    {
+      "modality": "MRI",
+      "cohort": "CONTR",
+      "patient": "37733238697F441B5E100D224D85966F",
+      "shape": [
+        23,
+        256,
+        204
+      ],
+      "study": "MRI_BRAIN_WO_CONTRAST",
+      "series": "Ax_FLAIR",
+      "path": "/data/RAD/CONTR/37733238697F441B5E100D224D85966F/20251009/MRI_BRAIN_WO_CONTRAST/Ax_FLAIR"
+    },
+    {
+      "modality": "CT",
+      "cohort": "LUPUS",
+      "patient": "07E3DCAC3413BB58F36A54519B220EB8",
+      "shape": [
+        34,
+        512,
+        512
+      ],
+      "study": "CT_HEAD_WO_CONTRAST",
+      "series": "Head__BW",
+      "path": "/data/RAD/LUPUS/07E3DCAC3413BB58F36A54519B220EB8/20170214/CT_HEAD_WO_CONTRAST/Head__BW"
+    },
+    {
+      "modality": "MRI",
+      "cohort": "LUPUS",
+      "patient": "07E3DCAC3413BB58F36A54519B220EB8",
+      "shape": [
+        192,
+        256,
+        192
+      ],
+      "study": "MRI_HEAD_W_WO_CONTRAST_MRA_HEAD_WO_CONTRAST",
+      "series": "T1_MPRAGE_AX_POST",
+      "path": "/data/RAD/LUPUS/07E3DCAC3413BB58F36A54519B220EB8/20170411/MRI_HEAD_W_WO_CONTRAST_MRA_HEAD_WO_CONTRAST/T1_MPRAGE_AX_POST"
+    },
+    {
+      "modality": "CT",
+      "cohort": "RHEUM",
+      "patient": "142B03B58C5786F4EE17FE8B59011FBF",
+      "shape": [
+        462,
+        512,
+        512
+      ],
+      "study": "CTA_HEAD_AND_NECK_W_CONTRAST",
+      "series": "THINS__F_0_6",
+      "path": "/data/RAD/RHEUM/142B03B58C5786F4EE17FE8B59011FBF/20230618/CTA_HEAD_AND_NECK_W_CONTRAST/THINS__F_0_6"
+    },
+    {
+      "modality": "MRI",
+      "cohort": "RHEUM",
+      "patient": "179A4B402890D43D694E0F88C09D8D3D",
+      "shape": [
+        23,
+        512,
+        512
+      ],
+      "study": "MR_HEAD_WWO_CONTR",
+      "series": "AX_T2_FLAIR",
+      "path": "/data/RAD/RHEUM/179A4B402890D43D694E0F88C09D8D3D/20141014/MR_HEAD_WWO_CONTR/AX_T2_FLAIR"
     }
   ]
 }

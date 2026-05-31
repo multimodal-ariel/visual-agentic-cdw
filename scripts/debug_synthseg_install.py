@@ -131,11 +131,14 @@ def run_upstream(
     crop: int | None,
     timeout: int | None,
 ) -> dict[str, Any]:
+    image_path = image_path.resolve()
+    out_dir = out_dir.resolve()
+    synthseg_dir = synthseg_dir.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    raw_seg = out_dir / "upstream_synthseg_raw_1mm.nii.gz"
-    volumes_csv = out_dir / "upstream_volumes.csv"
-    qc_csv = out_dir / "upstream_qc.csv"
-    runner = synthseg_dir / "scripts" / "commands" / "SynthSeg_predict.py"
+    raw_seg = (out_dir / "upstream_synthseg_raw_1mm.nii.gz").resolve()
+    volumes_csv = (out_dir / "upstream_volumes.csv").resolve()
+    qc_csv = (out_dir / "upstream_qc.csv").resolve()
+    runner = (synthseg_dir / "scripts" / "commands" / "SynthSeg_predict.py").resolve()
 
     cmd = [
         resolve_conda_executable(),
@@ -180,6 +183,9 @@ def run_wrapper(
     write_qc: bool,
     timeout: int | None,
 ) -> dict[str, Any]:
+    image_path = image_path.resolve()
+    out_dir = out_dir.resolve()
+    synthseg_dir = synthseg_dir.resolve()
     case_dir = out_dir / "wrapper_case"
     case_dir.mkdir(parents=True, exist_ok=True)
     case_image = case_dir / "image_nifti.nii.gz"
@@ -240,11 +246,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    work_dir = Path(args.work_dir)
+    work_dir = Path(args.work_dir).resolve()
     work_dir.mkdir(parents=True, exist_ok=True)
-    synthseg_dir = Path(args.synthseg_dir)
+    synthseg_dir = Path(args.synthseg_dir).resolve()
 
-    image_path = Path(args.input_image) if args.input_image else download_mni_template(work_dir)
+    image_path = Path(args.input_image).resolve() if args.input_image else download_mni_template(work_dir).resolve()
     report = {
         "image": nifti_info(image_path),
         "options": {
