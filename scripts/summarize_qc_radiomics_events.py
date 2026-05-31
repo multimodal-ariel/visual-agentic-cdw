@@ -94,6 +94,19 @@ def should_reprocess(event: dict[str, Any]) -> bool:
     return False
 
 
+def skipped_category(reason: str) -> str:
+    reason_lower = reason.lower()
+    if reason_lower.startswith("unsupported "):
+        return "policy_skipped_unsupported_anatomy"
+    if "no anatomy-relevant non-empty masks" in reason_lower:
+        return "ran_but_no_relevant_masks"
+    if "no non-empty target-organ masks" in reason_lower:
+        return "ran_but_no_relevant_masks"
+    if "image not found" in reason_lower:
+        return "missing_image"
+    return "skipped_other"
+
+
 def build_summary(
     latest: dict[str, dict[str, Any]],
     log_stats: dict[str, Any],
@@ -108,6 +121,7 @@ def build_summary(
     status_by_modality: dict[str, Counter[str]] = defaultdict(Counter)
     status_by_anatomy: dict[str, Counter[str]] = defaultdict(Counter)
     skipped_by_reason: Counter[str] = Counter()
+    skipped_by_category: Counter[str] = Counter()
     failed_by_reason: Counter[str] = Counter()
     reprocess_examples: list[dict[str, Any]] = []
 
@@ -130,7 +144,9 @@ def build_summary(
         status_by_anatomy[anatomy][status] += 1
 
         if status == "skipped":
-            skipped_by_reason[reason_from_event(event)] += 1
+            reason = reason_from_event(event)
+            skipped_by_reason[reason] += 1
+            skipped_by_category[skipped_category(reason)] += 1
         elif status == "failed":
             failed_by_reason[reason_from_event(event)] += 1
 
@@ -159,9 +175,23 @@ def build_summary(
 
     segmentation_completed_total = None
     segmentation_completed_not_seen = None
+    latest_case_ids = set(latest)
     if segmentation_completed_cases is not None:
         segmentation_completed_total = len(segmentation_completed_cases)
-        segmentation_completed_not_seen = len(segmentation_completed_cases - set(latest))
+        segmentation_completed_not_seen = len(segmentation_completed_cases - latest_case_ids)
+
+    incomplete_completed_outputs = sum(
+        1
+        for event in latest.values()
+        if str(event.get("status", "")).lower() == "completed"
+        and not (bool(event.get("geometric_done")) and bool(event.get("medsegqc_done")))
+    )
+    likely_actionable_remaining = (
+        (segmentation_completed_not_seen or 0)
+        + status_counts.get("failed", 0)
+        + status_counts.get("running", 0)
+        + incomplete_completed_outputs
+    )
 
     return {
         "log": log_stats,
@@ -179,6 +209,7 @@ def build_summary(
             for anatomy, counter in sorted(status_by_anatomy.items())
         },
         "skipped_by_reason": dict(skipped_by_reason.most_common()),
+        "skipped_by_category": dict(skipped_by_category.most_common()),
         "failed_by_reason": dict(failed_by_reason.most_common()),
         "completed_outputs": {
             "geometric_done": completed_geometric_done,
@@ -190,6 +221,17 @@ def build_summary(
         "reprocess": {
             "count": sum(1 for event in latest.values() if should_reprocess(event)),
             "examples": reprocess_examples,
+        },
+        "operational_snapshot": {
+            "not_started_from_segmentation_state": segmentation_completed_not_seen,
+            "completed_with_both_outputs": completed_both_done,
+            "completed_but_missing_output_markers": incomplete_completed_outputs,
+            "failed_or_running": status_counts.get("failed", 0) + status_counts.get("running", 0),
+            "policy_skipped_unsupported_anatomy": skipped_by_category.get(
+                "policy_skipped_unsupported_anatomy", 0
+            ),
+            "ran_but_no_relevant_masks": skipped_by_category.get("ran_but_no_relevant_masks", 0),
+            "likely_actionable_remaining": likely_actionable_remaining,
         },
         "segmentation_state_completed_total": segmentation_completed_total,
         "segmentation_completed_not_seen_in_events": segmentation_completed_not_seen,
@@ -212,6 +254,7 @@ def print_counter(title: str, values: dict[str, int], *, top_n: int | None = Non
 def print_summary(summary: dict[str, Any], *, top_n: int, show_examples: bool) -> None:
     log = summary["log"]
     completed_outputs = summary["completed_outputs"]
+    operational = summary["operational_snapshot"]
     reprocess = summary["reprocess"]
 
     print("QC/Radiomics Event Snapshot")
@@ -255,6 +298,16 @@ def print_summary(summary: dict[str, Any], *, top_n: int, show_examples: bool) -
                 f"{example['reason']}"
             )
 
+    print("\nOperational snapshot")
+    print(f"  Not started from segmentation state:   {operational['not_started_from_segmentation_state']}")
+    print(f"  Completed with both outputs:           {operational['completed_with_both_outputs']}")
+    print(f"  Completed but missing output markers:  {operational['completed_but_missing_output_markers']}")
+    print(f"  Failed or running:                     {operational['failed_or_running']}")
+    print(f"  Policy-skipped unsupported anatomy:    {operational['policy_skipped_unsupported_anatomy']}")
+    print(f"  Ran but no relevant masks found:       {operational['ran_but_no_relevant_masks']}")
+    print(f"  Likely actionable remaining now:       {operational['likely_actionable_remaining']}")
+
+    print_counter("Skipped categories", summary["skipped_by_category"], top_n=top_n)
     print_counter("Top skipped reasons", summary["skipped_by_reason"], top_n=top_n)
     print_counter("Top failed reasons", summary["failed_by_reason"], top_n=top_n)
     print_counter("Anatomy counts", summary["anatomy_counts"], top_n=top_n)
