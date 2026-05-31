@@ -32,8 +32,12 @@ cd external/SynthSeg
 python setup.py install
 ```
 
-Download the upstream model files as instructed by the SynthSeg README, but keep
-the canonical copies under the repo checkpoint tree:
+Download the upstream model files from the UCL Dropbox link in the SynthSeg
+README:
+
+https://liveuclac-my.sharepoint.com/:f:/g/personal/rmappmb_ucl_ac_uk/EtlNnulBSUtAvOP6S99KcAIBYzze7jTPsmFk2_iHqKDjEw
+
+Then keep the canonical copies under the repo checkpoint tree:
 
 ```text
 checkpoints/SynthSeg/
