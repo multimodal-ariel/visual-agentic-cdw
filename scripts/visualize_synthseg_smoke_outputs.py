@@ -60,8 +60,15 @@ def center_of_mask(mask: np.ndarray) -> tuple[int, int, int]:
     return tuple(int(x) for x in np.median(coords, axis=0))
 
 
+def clamp_index(index: int, size: int) -> int:
+    return max(0, min(int(index), int(size) - 1))
+
+
 def slice_triplet(volume: np.ndarray, mask: np.ndarray, labels: np.ndarray | None) -> list[dict]:
-    z, y, x = center_of_mask(mask)
+    x, y, z = center_of_mask(mask)
+    x = clamp_index(x, volume.shape[0])
+    y = clamp_index(y, volume.shape[1])
+    z = clamp_index(z, volume.shape[2])
     panels = [
         {
             "title": f"axial z={z}",
