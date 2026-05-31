@@ -42,6 +42,19 @@ MNI_URL = "https://www.bic.mni.mcgill.ca/~vfonov/icbm/2009/mni_icbm152_nlin_sym_
 MNI_T1_HINTS = ("t1", "nlin", "sym", "09a")
 
 
+def resolve_conda_executable() -> str:
+    candidates = [
+        os.environ.get("CONDA_EXE", ""),
+        shutil.which("conda") or "",
+        "/home/soumitri/env/miniconda3/bin/conda",
+        "/home/sochattopadhyay/miniconda3/bin/conda",
+    ]
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate):
+            return candidate
+    raise FileNotFoundError("Could not find conda executable. Set CONDA_EXE or run from a shell with conda on PATH.")
+
+
 def download_mni_template(work_dir: Path) -> Path:
     archive = work_dir / "mni_icbm152_nlin_sym_09a_nifti.zip"
     extract_dir = work_dir / "mni_icbm152_nlin_sym_09a"
@@ -125,7 +138,7 @@ def run_upstream(
     runner = synthseg_dir / "scripts" / "commands" / "SynthSeg_predict.py"
 
     cmd = [
-        "conda",
+        resolve_conda_executable(),
         "run",
         "-n",
         conda_env,
