@@ -154,6 +154,19 @@ TOOL_CONDA_ENVS = {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
+# TOOL CHECKPOINTS
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Keep third-party model weights under the repo-level checkpoints/ tree.
+# SynthSeg's upstream CLI expects these names under external/SynthSeg/models/;
+# the wrapper creates links/copies there from these canonical paths at runtime.
+SYNTHSEG_CHECKPOINT_DIR = CHECKPOINT_DIR / "SynthSeg"
+SYNTHSEG_ROBUST_CHECKPOINT = str(SYNTHSEG_CHECKPOINT_DIR / "synthseg_robust_2.0.h5")
+SYNTHSEG_STANDARD_CHECKPOINT = str(SYNTHSEG_CHECKPOINT_DIR / "synthseg_2.0.h5")
+SYNTHSEG_QC_CHECKPOINT = str(SYNTHSEG_CHECKPOINT_DIR / "synthseg_qc_2.0.h5")
+SYNTHSEG_PARC_CHECKPOINT = str(SYNTHSEG_CHECKPOINT_DIR / "synthseg_parc_2.0.h5")
+
+# ──────────────────────────────────────────────────────────────────────────────
 # QC SETTINGS
 # ──────────────────────────────────────────────────────────────────────────────
 

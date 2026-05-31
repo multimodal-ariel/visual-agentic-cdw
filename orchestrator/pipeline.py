@@ -248,6 +248,11 @@ class CasePipeline:
                             metadata_override.get("anatomy"))
             else:
                 result.metadata = self._step_metadata(case_path, image_path, result)
+            if self._is_unknown_anatomy(result.metadata.get("anatomy", "")):
+                result.is_diagnostic = False
+                result.metadata["skip_reason"] = (
+                    "Unknown anatomy from metadata; skipping rather than running broad segmentation tools"
+                )
             if not result.is_diagnostic:
                 result.status = "skipped"
                 result.warnings.append(
@@ -627,6 +632,13 @@ class CasePipeline:
                 "skip_reason": f"Could not infer modality from path components",
             }
 
+        if anatomy_norm in {"unknown", ""}:
+            return {
+                "modality": modality, "anatomy": anatomy_norm,
+                "is_diagnostic": False, "source": "path_heuristic",
+                "skip_reason": "Could not infer anatomy from path components",
+            }
+
         return {
             "modality": modality, "anatomy": anatomy_norm,
             "is_diagnostic": True, "source": "path_heuristic",
@@ -636,6 +648,14 @@ class CasePipeline:
 
     # Text-promptable tools that need organ lists from the planner
     _TEXT_PROMPTABLE = {"VoxTell", "TextMedSeg3D"}
+    # These tools are unsafe to run on unknown anatomy because their support is
+    # intentionally narrow. Keep the broader unknown-anatomy pass-through for
+    # body-wide tools, but require an explicit anatomy match here.
+    _STRICT_ANATOMY_TOOLS = {"SynthSeg"}
+
+    @staticmethod
+    def _is_unknown_anatomy(anatomy: Any) -> bool:
+        return str(anatomy or "").strip().lower() in {"", "unknown", "unk", "none", "n/a"}
 
     def _step_tool_selection(
         self, metadata: dict, result: CaseResult
@@ -683,6 +703,8 @@ class CasePipeline:
 
         - Skips tools flagged ``deferred``.
         - Modality must be in ``supported_modalities`` (or empty list = wildcard).
+        - Unknown anatomy returns no tools. In clinical batch mode, unknown
+          field-of-view should be skipped rather than broadly segmented.
         - Anatomy must be in ``supported_anatomies`` or ``["all"]``. Pass
           anatomy="all" to disable the anatomy filter (legacy behavior).
         - If ``self.tools_whitelist`` is set, intersect with it.
@@ -692,6 +714,8 @@ class CasePipeline:
 
         modality_u = modality.upper()
         anatomy_l = anatomy.lower() if anatomy else "all"
+        if self._is_unknown_anatomy(anatomy_l):
+            return []
 
         tools = []
         for category in ("fixed_class_tools", "text_promptable_tools", "label_prompted_tools"):
@@ -705,11 +729,13 @@ class CasePipeline:
                 if supported_mods and modality_u not in supported_mods:
                     continue
                 supported_ana = [a.lower() for a in entry.get("supported_anatomies", [])]
+                if name in self._STRICT_ANATOMY_TOOLS and anatomy_l not in supported_ana:
+                    continue
                 # Anatomy filter: skip only when both the tool and the case
                 # declare a specific anatomy and they disagree. Tools with
-                # "all" or no entry stay in. Cases with anatomy="all"/"unknown"
-                # also pass (we don't want unknown-anatomy heuristics to drop
-                # all tools).
+                # "all" or no entry stay in. anatomy="all" still disables the
+                # filter for explicit legacy calls, but anatomy="unknown" was
+                # already rejected above.
                 if supported_ana and "all" not in supported_ana \
                         and anatomy_l not in ("all", "unknown", "") \
                         and anatomy_l not in supported_ana:

@@ -1,7 +1,7 @@
 """
 SynthSeg Tool Wrapper
 =====================
-Contrast-agnostic brain MRI segmentation from Billot et al.
+Contrast-agnostic brain MRI and CT segmentation from Billot et al.
 
 SynthSeg writes a multilabel segmentation at 1 mm isotropic resolution. This
 wrapper resamples that label map back to the original image_nifti.nii.gz grid
@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import csv
 import os
+import shutil
 import subprocess
 import time
 from typing import Dict
@@ -23,6 +24,12 @@ import nibabel as nib
 import numpy as np
 from nibabel.processing import resample_from_to
 
+from config.constants import (
+    SYNTHSEG_PARC_CHECKPOINT,
+    SYNTHSEG_QC_CHECKPOINT,
+    SYNTHSEG_ROBUST_CHECKPOINT,
+    SYNTHSEG_STANDARD_CHECKPOINT,
+)
 from processing.format_utils import save_organ_mask
 from tools.base_tool import BaseSegmentationTool, ToolInput, ToolOutput
 
@@ -30,7 +37,7 @@ from tools.base_tool import BaseSegmentationTool, ToolInput, ToolOutput
 class SynthSegTool(BaseSegmentationTool):
     name = "SynthSeg"
     conda_env = "cdw_synthseg"
-    supported_modalities = ["MRI"]
+    supported_modalities = ["MRI", "CT"]
     supported_anatomies = ["head"]
     supports_2d = False
     supports_3d = True
@@ -78,6 +85,9 @@ class SynthSegTool(BaseSegmentationTool):
         synthseg_dir: str | None = None,
         robust: bool | None = None,
         parc: bool = False,
+        segmentation_checkpoint: str | None = None,
+        qc_checkpoint: str | None = None,
+        parc_checkpoint: str | None = None,
     ):
         self.dry_run = dry_run
         if synthseg_dir:
@@ -92,6 +102,18 @@ class SynthSegTool(BaseSegmentationTool):
             robust = os.environ.get("SYNTHSEG_ROBUST", "1").strip().lower() not in {"0", "false", "no"}
         self.robust = robust
         self.parc = parc
+        default_seg_ckpt = SYNTHSEG_ROBUST_CHECKPOINT if self.robust else SYNTHSEG_STANDARD_CHECKPOINT
+        self.segmentation_checkpoint = (
+            segmentation_checkpoint
+            or os.environ.get("SYNTHSEG_CHECKPOINT")
+            or default_seg_ckpt
+        )
+        self.qc_checkpoint = qc_checkpoint or os.environ.get("SYNTHSEG_QC_CHECKPOINT") or SYNTHSEG_QC_CHECKPOINT
+        self.parc_checkpoint = (
+            parc_checkpoint
+            or os.environ.get("SYNTHSEG_PARC_CHECKPOINT")
+            or SYNTHSEG_PARC_CHECKPOINT
+        )
 
     def run(self, inp: ToolInput) -> ToolOutput:
         t0 = time.time()
@@ -100,13 +122,14 @@ class SynthSegTool(BaseSegmentationTool):
         if self.dry_run:
             return self._dry_run(inp, output_dir, t0)
 
-        if inp.modality.upper() != "MRI" or inp.anatomy.lower() != "head":
+        modality = inp.modality.upper()
+        if modality not in {"MRI", "CT"} or inp.anatomy.lower() != "head":
             return ToolOutput(
                 tool_name=self.name,
                 case_path=inp.case_path,
                 seg_dir=output_dir,
                 success=False,
-                error=f"SynthSeg is restricted to brain/head MRI (got {inp.modality}/{inp.anatomy})",
+                error=f"SynthSeg is restricted to brain/head MRI or CT (got {inp.modality}/{inp.anatomy})",
                 runtime_seconds=time.time() - t0,
             )
 
@@ -128,6 +151,18 @@ class SynthSegTool(BaseSegmentationTool):
                 seg_dir=output_dir,
                 success=False,
                 error=f"SynthSeg runner not found: {runner}. Set SYNTHSEG_DIR or clone into external/SynthSeg.",
+                runtime_seconds=time.time() - t0,
+            )
+
+        try:
+            self._ensure_upstream_model_files()
+        except FileNotFoundError as exc:
+            return ToolOutput(
+                tool_name=self.name,
+                case_path=inp.case_path,
+                seg_dir=output_dir,
+                success=False,
+                error=str(exc),
                 runtime_seconds=time.time() - t0,
             )
 
@@ -153,6 +188,8 @@ class SynthSegTool(BaseSegmentationTool):
             cmd.append("--robust")
         if self.parc:
             cmd.append("--parc")
+        if modality == "CT":
+            cmd.append("--ct")
         if inp.device == "cpu":
             cmd.append("--cpu")
 
@@ -255,6 +292,32 @@ class SynthSegTool(BaseSegmentationTool):
             except Exception:
                 stats[key] = []
         return stats
+
+    def _ensure_upstream_model_files(self) -> None:
+        models_dir = os.path.join(self.synthseg_dir, "models")
+        os.makedirs(models_dir, exist_ok=True)
+
+        required = {
+            "synthseg_robust_2.0.h5" if self.robust else "synthseg_2.0.h5": self.segmentation_checkpoint,
+            "synthseg_qc_2.0.h5": self.qc_checkpoint,
+        }
+        if self.parc:
+            required["synthseg_parc_2.0.h5"] = self.parc_checkpoint
+
+        for model_name, source in required.items():
+            destination = os.path.join(models_dir, model_name)
+            if os.path.isfile(destination):
+                continue
+            if not os.path.isfile(source):
+                raise FileNotFoundError(
+                    "SynthSeg checkpoint not found. Expected "
+                    f"{source}. Download/place it under checkpoints/SynthSeg/ "
+                    f"or set the appropriate SYNTHSEG_*_CHECKPOINT environment variable."
+                )
+            try:
+                os.symlink(os.path.abspath(source), destination)
+            except OSError:
+                shutil.copy2(source, destination)
 
     def _dry_run(self, inp: ToolInput, output_dir: str, t0: float) -> ToolOutput:
         os.makedirs(output_dir, exist_ok=True)
