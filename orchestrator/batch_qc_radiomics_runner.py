@@ -80,7 +80,13 @@ MRI_TARGET_ORGAN_OVERRIDES = {
     "spine": ["spine"],
     "pelvis": ["prostate"],
 }
-CHEST_ANATOMIES = {"chest", "chest_abdomen_pelvis", "whole_body"}
+LUNG_ELIGIBLE_CT_ANATOMIES = {
+    "chest",
+    "abdomen",
+    "abdomen_pelvis",
+    "chest_abdomen_pelvis",
+    "whole_body",
+}
 DEFAULT_SEGMENTATION_STATE = (
     "/data/soumitri/visual-agentic-cdw/logs/pipeline_state_v2.json"
 )
@@ -1118,7 +1124,7 @@ class BatchQCRadiomicsRunner:
                 strategy="GeometricQC",
                 notes=[
                     "Masks are selected by largest volume among anatomy-relevant non-empty candidates.",
-                    "MRSegmentator full-lung masks are preferred for lung_left/lung_right in relevant CT chest anatomy.",
+                    "MRSegmentator full-lung masks are preferred for lung_left/lung_right in CT chest/abdomen anatomy when non-empty.",
                     "Radiomics features are shape + first-order only; texture classes are disabled.",
                 ],
             )
@@ -1182,7 +1188,7 @@ class BatchQCRadiomicsRunner:
         modality: str,
         anatomy: str,
     ) -> None:
-        if not is_ct_like_modality(modality) or anatomy not in CHEST_ANATOMIES:
+        if not is_ct_like_modality(modality) or anatomy not in LUNG_ELIGIBLE_CT_ANATOMIES:
             return
         for organ in ("lung_left", "lung_right"):
             organ_candidates = candidates.get(organ, [])
