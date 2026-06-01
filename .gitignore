@@ -33,6 +33,7 @@ venv.bak/
 
 # Project Specific
 logs/
+.logs/
 *.log
 log*/
 checkpoints/
