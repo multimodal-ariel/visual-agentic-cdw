@@ -1,88 +1,176 @@
-# CDW: Agentic AI Clinical Imaging Pipeline
+# *You See Voxels, I See Features:* A Unified Pipeline for Reliable Processing of Large-Scale Heterogeneous Clinical Imaging Data
 
-End-to-end, LLM-orchestrated processing for uncurated clinical CT/MRI:
-
-```metadata → planning → tool selection → segmentation → QC → radiomics.``` 
-
-All heavy models live in tool-specific conda environments and external submodules; only code is tracked here.
-
-## Authors
-
-#### Soumitri Chattopadhyay, Basar Demir, Yinzhu Jin, Marc Niethammer
-#### UCSD Biomedical Image Analysis Group
-
-## High-level flow
-1) **Metadata + planning (Qwen3-8B)**: modality, anatomy, shape, is_diagnostic → tool list + organ prompts.
-2) **Segmentation (per-tool envs)**: TotalSeg CT/MR, MRSegmentator, MRISegmenter, VISTA3D, VIBESeg, VoxTell, TextMedSeg3D; runners isolate deps.
-3) **Postprocess**: LCC, closing, hole fill, optional STAPLE/majority fusion.
-4) **QC (3 tiers)**: geometric checks → multi-tool agreement → LLM clinical interpretation (MedGemma-27B) + radiomics gating.
-5) **Radiomics**: PyRadiomics CPU (primary); cuRadiomics optional.
-
-## Repo layout (essentials)
-- `config/` paths, tool registry, QC priors, PyRadiomics params, prompts.
-- `tools/` wrappers + subprocess runners (one env per tool).
-- `planner/` LLM planner (metadata, tool selection, organ lists).
-- `orchestrator/` pipeline + batch runner + case tracker.
-- `processing/` preprocessing, postprocessing, format helpers.
-- `qc/` geometric QC, multi-tool QC, LLM interpretation.
-- `radiomics/` PyRadiomics + optional cuRadiomics.
-- `scripts/` env setup, checkpoint downloads, dummy/e2e runners, submodule helper.
-- `external/` tool codebases (git submodules); `checkpoints/` weights (ignored).
-
-## Key tools & envs (conda)
-- `cdw_totalseg`: TotalSegmentator CT/MR
-- `cdw_mrseg`: MRSegmentator
-- `cdw_mriseg`: MRISegmenter
-- `cdw_nvseg`: VISTA3D (NV-Segment-CTMR)
-- `cdw_vibeseg`: VIBESegmentator
-- `cdw_voxtell`: VoxTell
-- `cdw_textmedseg`: TextMedSeg3D / SAT-Pro
-- `cdw_llm`: MedGemma-27B, Qwen3-8B/32B
-- `cdw_radiomics`: PyRadiomics (primary), cuRadiomics optional
-
-## Quick start
-```bash
-# 1) Envs
-bash scripts/setup_envs.sh
-
-# 2) Weights (requires HF auth for MedGemma)
-bash scripts/download_checkpoints.sh
-
-# 3) Edit paths
-vim config/constants.py
-
-# 4) Smoke tests
-python scripts/run_dummy_test.py            # runs tool wrappers on dummy data
-conda run -n cdw_radiomics python tests/run_e2e.py --mode string  # planner-only
-conda run -n cdw_radiomics python tests/run_e2e.py --mode image   # full on dummy
-
-# 5) Batch (production example)
-/home/soumitri/env/miniconda3/bin/conda run -n cdw_llm python -m orchestrator.batch_runner --filelist /data/soumitri/test_pipeline_new_2_llm/filelist_testing_remapped.json --gpus 0 --skip-radiomics --consensus
+```text
+DICOM/NIfTI -> metadata -> tool selection -> segmentation -> QC -> radiomics
 ```
 
-Full server bring-up (multi-GPU) is summarized in `docs/deployment.md`.
+The pipeline turns messy clinical imaging folders into standardized anatomical
+masks, QC summaries, and quantitative imaging features. It wraps multiple
+segmentation foundation models behind a common interface, tracks long-running
+batch jobs, and keeps outputs reproducible across modalities, anatomies, and
+tool backends.
 
-## Running LLMs
-- Planner (metadata/tool selection): Qwen3-8B (fast, rule-following).
-- QC interpretation + radiomics gating: MedGemma-27B (clinical domain).
-- Optional vLLM server supported via `planner/llm_client.py`.
+Authors: Soumitri Chattopadhyay, Basar Demir, Yinzhu Jin, Marc Niethammer  
+UCSD Biomedical Image Analysis Group
 
-## Data & outputs
-- Inputs expected under `DICOM_ROOT` / `SEGMENTATION_ROOT` (set in `config/constants.py`).
-- Per-case outputs: segmentations per tool, QC CSV/JSON, radiomics features; logs under `logs/`.
+## Highlights
 
-## Git / submodules / weights
-- Code only is tracked; `checkpoints/`, data, and outputs are ignored.
-- Tool repos live in `external/` as submodules (e.g., detectron2, TotalSegmentator, VISTA3D, VoxTell, etc.).
-- After clone: `git submodule update --init --recursive`.
+- Batch processing for heterogeneous clinical filelists with persistent resume state.
+- Lazy DICOM-to-NIfTI materialization for cases missing `image_nifti.nii.gz`.
+- Anatomy-aware tool selection and QC target filtering for body, cardiac, spine, pelvis, and head studies.
+- Integrated brain segmentation for CT/MRI head studies through SynthSeg.
+- Two-stage downstream QC/radiomics: largest-volume GeometricQC, optional MedSegQC for supported CT/MRI abdominal organs, and PyRadiomics shape/first-order features.
+- One wrapper contract for all tools: each tool writes binary per-organ masks into a canonical `segmentations_<tool>/` folder.
 
-## Tests
-- Unit: `tests/test_base_tool.py`, `tests/test_qc.py`, `tests/test_llm_dry_run.py`.
-- E2E: `tests/run_e2e.py` (string/image/full modes) on 3 CT + 3 MRI dummy cases with full decision trace → `tests/results/e2e_report.json`.
-- Latest results (2026-03-23): 6/6 string (100% modality), 6/6 image (89 organs × 107 features = 9,523), **163/163 ground-truth validation checks ALL PASS**.
+## Integrated Tools
+
+Active segmentation backends include:
+
+- TotalSegmentator CT/MR
+- MRSegmentator
+- MRISegmenter
+- VIBESegmentator
+- SynthSeg
+- VISTA3D / NVSegmentCTMR
+- VoxTell
+- TextMedSeg3D / SAT
+
+Deferred or optional integrations include BiomedParse2D/3D, nnInteractive, HybridGNet, cuRadiomics, and LLM-based planning/QC interpretation. Tool metadata lives in `config/tool_registry.json`.
+
+## Repository Layout
+
+- `orchestrator/`: single-case pipeline, batch runner, QC/radiomics runner, state tracking.
+- `tools/`: model wrappers and subprocess runners.
+- `processing/`: DICOM/NIfTI conversion, normalization, mask formatting, postprocessing.
+- `qc/`: anatomy policy, geometric checks, MedSegQC integration.
+- `radiomics/`: PyRadiomics extraction helpers.
+- `config/`: paths, tool registry, constants, prompts, feature settings.
+- `docs/`: detailed installation, deployment, extension, and parallelism notes.
+- `external/`: third-party model repositories.
+- `checkpoints/`: model weights, ignored by git.
+
+## Installation
+
+Clone the repository and populate external tool code:
+
+```bash
+git clone https://github.com/multimodal-ariel/visual-agentic-cdw.git
+cd visual-agentic-cdw
+git submodule update --init --recursive
+```
+
+Create isolated conda environments for each backend:
+
+```bash
+export PYTHONNOUSERSITE=1
+bash scripts/setup_envs.sh
+```
+
+Download model checkpoints:
+
+```bash
+bash scripts/download_checkpoints.sh
+```
+
+Edit local paths in `config/constants.py`, especially:
+
+```python
+DICOM_ROOT = "/path/to/raw/dicom"
+SEGMENTATION_ROOT = "/path/to/segmentation_outputs"
+```
+
+For full server setup, environment-specific fixes, and checkpoint notes, see `docs/installation.md` and `docs/deployment.md`.
+
+## Quick Start
+
+Run a segmentation batch over a JSON filelist of case directories:
+
+```bash
+conda run -n cdw_radiomics python -m orchestrator.batch_runner \
+  --filelist new_data_paths/3d_volume_paths_interleaved.json \
+  --gpus 0,1,2,3 \
+  --workers 4 \
+  --no-llm \
+  --progress-every 50 \
+  --log-level WARNING
+```
+
+The runner writes:
+
+- `logs/pipeline_state_v3.json`: resumable per-case state.
+- `logs/pipeline_results_v3.csv`: one row per attempted case.
+- `{SEGMENTATION_ROOT}/.../segmentations_<tool>/`: per-tool masks.
+
+Completed cases are skipped automatically on rerun. Add `--retry-failed` to retry failed cases.
+
+## QC and Radiomics
+
+After segmentation, run the downstream filtering and feature extraction pass:
+
+```bash
+conda run -n cdw_radiomics python orchestrator/batch_qc_radiomics_runner.py \
+  --segmentation-state logs/pipeline_state_v3.json \
+  --segmentation-root /path/to/segmentation_outputs \
+  --gpus 0,1,2,3 \
+  --workers 4 \
+  --progress-every 50 \
+  --log-level WARNING
+```
+
+Use `--watch` only when segmentation is still running and new completed cases are appearing in the state file.
+
+Per-case QC outputs:
+
+- `segmentations_filtered_GeometricQC/`: largest-volume anatomy-relevant masks.
+- `segmentations_filtered_MedSegQC/`: MedSegQC-selected masks where applicable.
+- `qc_scores.csv`: candidate masks, geometry checks, QC scores/errors.
+- `radiomics_features.csv`: PyRadiomics shape and first-order features.
+- `selection_summary.json`: selected masks and provenance.
+
+MedSegQC is only used for supported CT/MRI abdominal organs (`liver`, `spleen`, `kidney_left`, `kidney_right`). PET/CT cases still receive GeometricQC/radiomics, but MedSegQC is skipped.
+
+## Data Contract
+
+Each case directory is expected to contain or be able to materialize:
+
+```text
+<case_path>/
+  image_nifti.nii.gz
+  segmentations_<tool>/
+    <organ>.nii.gz
+```
+
+Masks should be binary, named by normalized organ name, and aligned to `image_nifti.nii.gz` unless the wrapper explicitly records/resolves geometry differences.
+
+## Extending the Pipeline
+
+To add a segmentation model:
+
+1. Put third-party code under `external/<ToolName>/`.
+2. Add a wrapper in `tools/<tool_name>.py` by subclassing `BaseSegmentationTool`.
+3. Register output directories and conda envs in `config/constants.py`.
+4. Add tool metadata to `config/tool_registry.json`.
+5. Ensure outputs follow the canonical per-organ NIfTI contract.
+6. Add a dry-run or minimal smoke test.
+
+See `docs/adding_segmentation_tool.md` for the full checklist.
+
+## Development Checks
+
+```bash
+conda run -n cdw_radiomics python orchestrator/batch_qc_radiomics_runner.py --self-test
+conda run -n cdw_radiomics python -m pytest tests
+```
+
+For focused setup/debugging, see:
+
+- `docs/installation.md`
+- `docs/deployment.md`
+- `docs/adding_segmentation_tool.md`
+- `docs/PARALLELISM.md`
 
 ## Notes
-- One unified env will not work; always invoke via `conda run -n <env>` per tool.
-- BiomedParse3D is skipped (detectron2 CUDA fragility); VoxTell + SAT-Pro cover 3D text-prompted use cases.
-- MRI geometric QC skips volume/ratio checks (CT-calibrated); relies on CC + overlap + multi-tool agreement.
-- Detailed pipeline docs: see `PIPELINE.md`.
+
+- This repository tracks code and configuration only. Data, checkpoints, logs, and generated outputs should remain untracked.
+- Tool environments are intentionally separate; a single unified Python environment is not expected to work.
+- This is research software for large-scale clinical imaging analysis, not a medical device.
