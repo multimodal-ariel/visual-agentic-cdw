@@ -43,6 +43,10 @@ class DicomSlice:
     columns: int
     pixel_spacing: tuple[float, float]
     series_count: int = 1
+    series_number: int | None = None
+    acquisition_number: int | None = None
+    image_type: tuple[str, ...] = ()
+    selection_reason: str = "single_series"
 
 
 def extract_selected_dicom_metadata(dicom) -> dict:
@@ -134,6 +138,23 @@ def _read_slice_header(path: str) -> DicomSlice | None:
             instance_number = int(ds.InstanceNumber)
         except Exception:
             instance_number = None
+    series_number = None
+    if hasattr(ds, "SeriesNumber"):
+        try:
+            series_number = int(ds.SeriesNumber)
+        except Exception:
+            series_number = None
+    acquisition_number = None
+    if hasattr(ds, "AcquisitionNumber"):
+        try:
+            acquisition_number = int(ds.AcquisitionNumber)
+        except Exception:
+            acquisition_number = None
+    raw_image_type = getattr(ds, "ImageType", ())
+    if isinstance(raw_image_type, str):
+        image_type = tuple(part.upper() for part in raw_image_type.split("\\") if part)
+    else:
+        image_type = tuple(str(part).upper() for part in raw_image_type)
 
     return DicomSlice(
         path=path,
@@ -148,6 +169,9 @@ def _read_slice_header(path: str) -> DicomSlice | None:
         rows=int(ds.Rows),
         columns=int(ds.Columns),
         pixel_spacing=(float(pixel_spacing[0]), float(pixel_spacing[1])),
+        series_number=series_number,
+        acquisition_number=acquisition_number,
+        image_type=image_type,
     )
 
 
@@ -197,9 +221,104 @@ def _validate_and_sort_series(slices: list[DicomSlice], dicom_dir: str | os.Path
             columns=s.columns,
             pixel_spacing=s.pixel_spacing,
             series_count=series_count,
+            series_number=s.series_number,
+            acquisition_number=s.acquisition_number,
+            image_type=s.image_type,
+            selection_reason=s.selection_reason,
         )
         for s in sorted_slices
     ]
+
+
+def _with_selection_metadata(
+    group: list[DicomSlice],
+    *,
+    series_count: int,
+    selection_reason: str,
+) -> list[DicomSlice]:
+    return [
+        DicomSlice(
+            path=s.path,
+            position=s.position,
+            row_cosines=s.row_cosines,
+            col_cosines=s.col_cosines,
+            normal=s.normal,
+            sort_position=s.sort_position,
+            instance_number=s.instance_number,
+            series_uid=s.series_uid,
+            study_uid=s.study_uid,
+            rows=s.rows,
+            columns=s.columns,
+            pixel_spacing=s.pixel_spacing,
+            series_count=series_count,
+            series_number=s.series_number,
+            acquisition_number=s.acquisition_number,
+            image_type=s.image_type,
+            selection_reason=selection_reason,
+        )
+        for s in group
+    ]
+
+
+def _series_preference_score(group: list[DicomSlice]) -> int:
+    image_type = set(group[0].image_type)
+    score = 0
+    if "ORIGINAL" in image_type:
+        score += 4
+    if "PRIMARY" in image_type:
+        score += 2
+    if image_type & {"DERIVED", "SECONDARY", "LOCALIZER"}:
+        score -= 10
+    return score
+
+
+def _geometry_signature(group: list[DicomSlice]) -> tuple:
+    ref = group[0]
+    positions = tuple(round(s.sort_position, 5) for s in group)
+    return (
+        ref.rows,
+        ref.columns,
+        tuple(round(v, 5) for v in ref.pixel_spacing),
+        tuple(round(float(v), 5) for v in ref.row_cosines),
+        tuple(round(float(v), 5) for v in ref.col_cosines),
+        positions,
+    )
+
+
+def _choose_from_equal_length_series(
+    groups: list[list[DicomSlice]],
+    dicom_dir: str | os.PathLike,
+) -> list[DicomSlice]:
+    scored = [(_series_preference_score(group), group) for group in groups]
+    best_score = max(score for score, _ in scored)
+    best = [group for score, group in scored if score == best_score]
+    if len(best) == 1:
+        return _with_selection_metadata(
+            best[0],
+            series_count=best[0][0].series_count,
+            selection_reason=f"metadata_preference_score_{best_score}",
+        )
+
+    signatures = {_geometry_signature(group) for group in best}
+    if len(signatures) == 1:
+        chosen = sorted(
+            best,
+            key=lambda group: (
+                group[0].series_number if group[0].series_number is not None else 10**9,
+                group[0].acquisition_number if group[0].acquisition_number is not None else 10**9,
+                group[0].series_uid,
+            ),
+        )[0]
+        return _with_selection_metadata(
+            chosen,
+            series_count=chosen[0].series_count,
+            selection_reason="same_geometry_deterministic_tiebreak",
+        )
+
+    raise ValueError(
+        f"Ambiguous DICOM directory {dicom_dir}: multiple valid "
+        f"SeriesInstanceUIDs with {len(groups[0])} slices"
+    )
 
 
 def load_and_sort_dicom_slices(dicom_dir: str | os.PathLike) -> list[DicomSlice]:
@@ -245,6 +364,10 @@ def load_and_sort_dicom_slices(dicom_dir: str | os.PathLike) -> list[DicomSlice]
                     columns=s.columns,
                     pixel_spacing=s.pixel_spacing,
                     series_count=series_count,
+                    series_number=s.series_number,
+                    acquisition_number=s.acquisition_number,
+                    image_type=s.image_type,
+                    selection_reason=s.selection_reason,
                 )
                 for s in sorted_group
             ]
@@ -258,12 +381,14 @@ def load_and_sort_dicom_slices(dicom_dir: str | os.PathLike) -> list[DicomSlice]
 
     valid.sort(key=lambda group: len(group), reverse=True)
     if len(valid) > 1 and len(valid[0]) == len(valid[1]):
-        raise ValueError(
-            f"Ambiguous DICOM directory {dicom_dir}: multiple valid "
-            f"SeriesInstanceUIDs with {len(valid[0])} slices"
-        )
+        tied = [group for group in valid if len(group) == len(valid[0])]
+        return _choose_from_equal_length_series(tied, dicom_dir)
 
-    return valid[0]
+    return _with_selection_metadata(
+        valid[0],
+        series_count=valid[0][0].series_count,
+        selection_reason="largest_valid_series",
+    )
 
 
 def _slice_spacing(sorted_slices: list[DicomSlice], ref_dicom) -> float:
@@ -325,6 +450,7 @@ def convert_dicom_to_nifti_3d(dicom_dir: str | os.PathLike):
             "sort_method": "ImagePositionPatient_projected_on_slice_normal",
             "source_series_count": ref_slice.series_count,
             "selected_series_uid": ref_slice.series_uid,
+            "series_selection_reason": ref_slice.selection_reason,
         }
     )
     ext = Nifti1Extension(6, json.dumps(metadata, indent=2).encode("utf-8"))
