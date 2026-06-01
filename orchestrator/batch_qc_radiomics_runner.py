@@ -10,8 +10,12 @@ extracts fast shape + first-order PyRadiomics features from both outputs.
 Default production invocation:
 
     conda run -n cdw_radiomics python orchestrator/batch_qc_radiomics_runner.py \
-        --segmentation-state logs/pipeline_state_v3.json \
-        --gpus 0,1,2,3,4,5,6,7 --workers 8 --watch
+  --segmentation-state logs/pipeline_state_v3.json \
+  --segmentation-root /data/soumitri/segmentations_3d \
+  --gpus 0,1,2,3,4,5,6,7 \
+  --workers 8 \
+  --progress-every 50 \
+  --log-level WARNING
 
 The QC model checkpoint paths default to the private-server locations provided
 by the deployment notes. Override them from the CLI if needed.

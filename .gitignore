@@ -48,6 +48,12 @@ dummy_outputs/
 outputs/
 results/
 .cache/
+visualizations/
+debug/
+stats/
+test_*/
+*.zip
+
 
 # Model Configurations / Weights
 *.pth
