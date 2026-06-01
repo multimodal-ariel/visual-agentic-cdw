@@ -10,7 +10,7 @@ extracts fast shape + first-order PyRadiomics features from both outputs.
 Default production invocation:
 
     conda run -n cdw_radiomics python orchestrator/batch_qc_radiomics_runner.py \
-        --segmentation-state /data/soumitri/visual-agentic-cdw/logs/pipeline_state_v2.json \
+        --segmentation-state logs/pipeline_state_v3.json \
         --gpus 0,1,2,3,4,5,6,7 --workers 8 --watch
 
 The QC model checkpoint paths default to the private-server locations provided
@@ -52,6 +52,13 @@ from config.constants import (
     TOOL_OUTPUT_DIRS,
 )
 from orchestrator.case_id import case_id_to_abspath
+from qc.anatomy_policy import (
+    MEDSEGQC_ORGANS,
+    is_lung_shortcut_eligible,
+    medsegqc_supported_organs,
+    needs_reference_organs,
+    resolve_qc_targets,
+)
 from radiomics.pyradiomics import (
     _get_pyradiomics_featureextractor as _get_local_pyradiomics_featureextractor,
 )
@@ -60,35 +67,11 @@ logger = logging.getLogger(__name__)
 _METADATA_PIPELINE = None
 
 
-MEDSEGQC_ORGANS = ("liver", "kidney_left", "kidney_right", "spleen")
 GEOMETRIC_QC_DIRNAME = "segmentations_filtered_GeometricQC"
 MEDSEGQC_DIRNAME = "segmentations_filtered_MedSegQC"
-LEGACY_BEST_DIRNAME = "segmentations_best"
 MRSEG_DIRNAME = TOOL_OUTPUT_DIRS["MRSegmentator"]
-SUPPORTED_CT_ANATOMIES = {
-    "chest",
-    "abdomen",
-    "pelvis",
-    "abdomen_pelvis",
-    "chest_abdomen_pelvis",
-    "whole_body",
-    "cardiac",
-}
-SUPPORTED_MRI_ANATOMIES = {"abdomen", "abdomen_pelvis", "cardiac", "spine", "pelvis"}
-MRI_TARGET_ORGAN_OVERRIDES = {
-    "cardiac": ["heart"],
-    "spine": ["spine"],
-    "pelvis": ["prostate"],
-}
-LUNG_ELIGIBLE_CT_ANATOMIES = {
-    "chest",
-    "abdomen",
-    "abdomen_pelvis",
-    "chest_abdomen_pelvis",
-    "whole_body",
-}
 DEFAULT_SEGMENTATION_STATE = (
-    "/data/soumitri/visual-agentic-cdw/logs/pipeline_state_v2.json"
+    str(Path(LOG_DIR) / "pipeline_state_v3.json")
 )
 DEFAULT_CT_QC_CHECKPOINT = (
     "/data/soumitri/visual-agentic-cdw/checkpoints/MedSegQC/qc_ct_epch33.ckpt"
@@ -221,6 +204,8 @@ class JsonStateTracker:
                 entry["error"] = ""
             if skip_reason:
                 entry["skip_reason"] = skip_reason
+            elif status in {"running", "completed"}:
+                entry["skip_reason"] = ""
             if warnings is not None:
                 entry["warnings"] = warnings
             if total_time_s is not None:
@@ -350,20 +335,34 @@ class QCModelBundle:
             return QCResult(error=str(exc))
 
 
-def output_dir_complete(path: str) -> bool:
+def output_dir_complete(path: str, *, require_selected_masks: bool = False) -> bool:
     if not os.path.isdir(path):
         return False
     try:
         required = ("selection_summary.json", "qc_scores.csv")
-        return any(os.scandir(path)) and all(os.path.isfile(os.path.join(path, f)) for f in required)
+        if not all(os.path.isfile(os.path.join(path, f)) for f in required):
+            return False
+        with open(os.path.join(path, "selection_summary.json")) as f:
+            summary = json.load(f)
+        selected = summary.get("selected_organs") or {}
+        if require_selected_masks and not selected:
+            return False
+        for details in selected.values():
+            selected_mask_path = details.get("selected_mask_path", "")
+            if selected_mask_path and not os.path.isfile(selected_mask_path):
+                return False
+        return True
     except OSError:
+        return False
+    except (json.JSONDecodeError, AttributeError):
         return False
 
 
 def case_outputs_done(case_path: str) -> bool:
-    geometric_done = output_dir_complete(os.path.join(case_path, GEOMETRIC_QC_DIRNAME))
-    # Require an explicit MedSegQC summary/marker too. Chest-only cases write an
-    # empty marker, so absence means the case still needs the new runner/migration.
+    geometric_done = output_dir_complete(
+        os.path.join(case_path, GEOMETRIC_QC_DIRNAME),
+        require_selected_masks=True,
+    )
     medsegqc_done = medsegqc_output_done(case_path)
     return geometric_done and medsegqc_done
 
@@ -373,6 +372,19 @@ def medsegqc_output_done(case_path: str) -> bool:
     if not os.path.isdir(medsegqc_dir):
         return False
     return output_dir_complete(medsegqc_dir)
+
+
+def medsegqc_supported_modality(modality: str) -> bool:
+    return str(modality).upper() in {"CT", "MRI"}
+
+
+def is_transient_skip_reason(reason: str) -> bool:
+    normalized = str(reason or "").lower()
+    transient_markers = (
+        "no anatomy-relevant non-empty masks found",
+        "no non-empty target-organ masks found",
+    )
+    return any(marker in normalized for marker in transient_markers)
 
 
 def metadata_from_case_path(case_path: str) -> dict[str, Any]:
@@ -395,33 +407,11 @@ def expected_organs_from_metadata(metadata: dict[str, Any]) -> list[str]:
     )
 
 
-def is_ct_like_modality(modality: str) -> bool:
-    return modality.upper() in {"CT", "PET_CT"}
-
-
 def filter_case_targets(case_path: str) -> tuple[dict[str, Any], list[str], str]:
     metadata = metadata_from_case_path(case_path)
-    modality = str(metadata.get("modality", "UNKNOWN")).upper()
-    anatomy = str(metadata.get("anatomy", "unknown")).lower()
-    if not metadata.get("is_diagnostic", True):
-        return metadata, [], metadata.get("skip_reason", "non-diagnostic case")
-
-    if is_ct_like_modality(modality):
-        if anatomy not in SUPPORTED_CT_ANATOMIES:
-            return metadata, [], f"unsupported CT anatomy: {anatomy}"
-    elif modality == "MRI":
-        if anatomy not in SUPPORTED_MRI_ANATOMIES:
-            return metadata, [], f"unsupported MRI anatomy: {anatomy} (allowed: abdomen, abdomen_pelvis, cardiac, spine, pelvis)"
-    else:
-        return metadata, [], f"unsupported modality: {modality}"
-
-    if modality == "MRI" and anatomy in MRI_TARGET_ORGAN_OVERRIDES:
-        organs = list(MRI_TARGET_ORGAN_OVERRIDES[anatomy])
-    else:
-        organs = expected_organs_from_metadata(metadata)
-    if not organs:
-        return metadata, [], f"no expected organs for anatomy: {anatomy}"
-    return metadata, organs, ""
+    expected_organs = expected_organs_from_metadata(metadata) if needs_reference_organs(metadata) else []
+    targets = resolve_qc_targets(metadata, expected_organs)
+    return targets.metadata, targets.target_organs, targets.skip_reason
 
 
 def normalize_organ_name(name: str) -> str:
@@ -453,13 +443,13 @@ def discover_tool_dirs(case_path: str, tools_run: list[str]) -> list[tuple[str, 
             pairs.append((tool_name, seg_dir))
             seen_dirs.add(seg_dir)
 
-    # Be forgiving if the upstream state omitted tools_run or a new tool was added.
-    if not pairs:
-        for tool_name, dirname in TOOL_OUTPUT_DIRS.items():
-            seg_dir = os.path.join(case_path, dirname)
-            if os.path.isdir(seg_dir) and seg_dir not in seen_dirs:
-                pairs.append((tool_name, seg_dir))
-                seen_dirs.add(seg_dir)
+    # Be forgiving if upstream tools_run is stale/incomplete or a new tool was
+    # added after the segmentation state entry was written.
+    for tool_name, dirname in TOOL_OUTPUT_DIRS.items():
+        seg_dir = os.path.join(case_path, dirname)
+        if os.path.isdir(seg_dir) and seg_dir not in seen_dirs:
+            pairs.append((tool_name, seg_dir))
+            seen_dirs.add(seg_dir)
     return pairs
 
 
@@ -585,6 +575,15 @@ def copy_selected_masks(
         shutil.copy2(candidate.mask_path, dest)
         copied[organ] = dest
     return copied
+
+
+def reset_generated_output_dir(path: str) -> None:
+    """Clear one runner-owned output folder before rewriting its contract files."""
+    if os.path.lexists(path):
+        if os.path.islink(path) or not os.path.isdir(path):
+            raise RuntimeError(f"Refusing to overwrite non-directory QC output path: {path}")
+        shutil.rmtree(path)
+    os.makedirs(path, exist_ok=True)
 
 
 def write_rows_csv(path: str, rows: list[dict[str, Any]]) -> None:
@@ -732,6 +731,16 @@ def make_test_case(
     return case_id, case_path
 
 
+def safe_case_id_to_abspath(case_id: str, segmentation_root: str) -> str:
+    case_path = Path(case_id_to_abspath(case_id, segmentation_root)).resolve(strict=False)
+    root_path = Path(segmentation_root).resolve(strict=False)
+    try:
+        case_path.relative_to(root_path)
+    except ValueError as exc:
+        raise ValueError(f"Case id resolves outside segmentation root: {case_id!r}") from exc
+    return str(case_path)
+
+
 def load_completed_work(segmentation_state_file: str, segmentation_root: str) -> list[CaseWorkItem]:
     state = load_json_with_retries(segmentation_state_file)
     cases = state.get("cases", {})
@@ -739,7 +748,11 @@ def load_completed_work(segmentation_state_file: str, segmentation_root: str) ->
     for case_id, entry in cases.items():
         if entry.get("status") != "completed":
             continue
-        case_path = case_id_to_abspath(case_id, segmentation_root)
+        try:
+            case_path = safe_case_id_to_abspath(case_id, segmentation_root)
+        except ValueError as exc:
+            logger.warning("Skipping invalid case id from segmentation state: %s", exc)
+            continue
         work.append(
             CaseWorkItem(
                 case_id=case_id,
@@ -769,6 +782,7 @@ class BatchQCRadiomicsRunner:
         force: bool = False,
         poll_seconds: float = 60.0,
         max_cases: Optional[int] = None,
+        progress_every: int = 50,
     ):
         self.segmentation_state = segmentation_state
         self.segmentation_root = segmentation_root
@@ -784,6 +798,7 @@ class BatchQCRadiomicsRunner:
         self.force = force
         self.poll_seconds = poll_seconds
         self.max_cases = max_cases
+        self.progress_every = max(0, int(progress_every))
 
         os.makedirs(LOG_DIR, exist_ok=True)
         self.qc_state_file = qc_state_file or os.path.join(LOG_DIR, "qc_radiomics_state.json")
@@ -850,7 +865,7 @@ class BatchQCRadiomicsRunner:
         while True:
             work = self._collect_work(seen_in_this_process)
             if self.max_cases is not None:
-                work = work[: max(0, self.max_cases - total_completed - total_failed)]
+                work = work[: max(0, self.max_cases - total_completed - total_failed - total_skipped)]
             if work:
                 logger.info("QC/radiomics batch: %d case(s) to process", len(work))
                 completed, failed, skipped = self._process_work(work, seen_in_this_process)
@@ -860,7 +875,7 @@ class BatchQCRadiomicsRunner:
             elif not watch:
                 break
 
-            if self.max_cases is not None and (total_completed + total_failed) >= self.max_cases:
+            if self.max_cases is not None and (total_completed + total_failed + total_skipped) >= self.max_cases:
                 break
             if not watch:
                 break
@@ -898,7 +913,9 @@ class BatchQCRadiomicsRunner:
                 )
                 continue
             local = self.tracker.get_case(item.case_id)
-            if not self.force and local.get("status") == "skipped":
+            if not self.force and local.get("status") == "skipped" and not is_transient_skip_reason(
+                local.get("skip_reason") or local.get("error", "")
+            ):
                 continue
             if local.get("status") == "running":
                 # The previous process may have died; re-run unless best dir says done.
@@ -912,6 +929,8 @@ class BatchQCRadiomicsRunner:
         seen_in_this_process: set[str],
     ) -> tuple[int, int, int]:
         completed = failed = skipped = 0
+        processed = 0
+        started = time.time()
         with ThreadPoolExecutor(max_workers=self.workers) as executor:
             futures = {}
             for item in work:
@@ -927,6 +946,8 @@ class BatchQCRadiomicsRunner:
                     logger.exception("[%s] Unhandled worker error", item.case_id)
                     self.tracker.set_status(item.case_id, "failed", case_path=item.case_path, error=str(exc))
                     failed += 1
+                    processed += 1
+                    self._log_progress(processed, len(work), completed, failed, skipped, started)
                     continue
                 if outcome.status == "completed":
                     completed += 1
@@ -934,7 +955,36 @@ class BatchQCRadiomicsRunner:
                     skipped += 1
                 else:
                     failed += 1
+                processed += 1
+                self._log_progress(processed, len(work), completed, failed, skipped, started)
         return completed, failed, skipped
+
+    def _log_progress(
+        self,
+        processed: int,
+        total_work: int,
+        completed: int,
+        failed: int,
+        skipped: int,
+        started: float,
+    ) -> None:
+        if self.progress_every <= 0:
+            return
+        if processed != total_work and processed % self.progress_every != 0:
+            return
+        elapsed = max(time.time() - started, 1e-6)
+        rate = processed / elapsed
+        eta_min = (total_work - processed) / rate / 60 if rate > 0 else 0.0
+        logger.warning(
+            "QC/radiomics progress: %d/%d processed | completed=%d failed=%d skipped=%d | %.2f cases/min | ETA %.1f min",
+            processed,
+            total_work,
+            completed,
+            failed,
+            skipped,
+            rate * 60,
+            eta_min,
+        )
 
     def _run_one_case_with_gpu(self, item: CaseWorkItem, gpu_id: Optional[int]) -> CaseOutcome:
         try:
@@ -956,6 +1006,9 @@ class BatchQCRadiomicsRunner:
                 outcome.status = "failed"
                 outcome.error = f"Image not found: {image_path}"
                 return self._finalize_outcome(outcome, t0)
+
+            reset_generated_output_dir(geometric_dir)
+            reset_generated_output_dir(medsegqc_dir)
 
             metadata, target_organs, skip_reason = filter_case_targets(item.case_path)
             outcome.metadata = metadata
@@ -991,10 +1044,10 @@ class BatchQCRadiomicsRunner:
                 outcome.error = "No non-empty target-organ masks found"
                 return self._finalize_outcome(outcome, t0)
 
-            image_array = load_volume_array(image_path)
             geometric_paths = copy_selected_masks(geometric_by_organ, geometric_dir)
             qc_by_key: dict[tuple[str, str], QCResult] = {}
             medsegqc_by_organ: dict[str, CandidateMask] = {}
+            image_array: Optional[np.ndarray] = None
 
             for organ, organ_candidates in candidates.items():
                 best_volume_candidate = geometric_by_organ.get(organ)
@@ -1003,13 +1056,17 @@ class BatchQCRadiomicsRunner:
 
                 rows_for_organ: list[dict[str, Any]] = []
                 for candidate in organ_candidates:
-                    if organ in MEDSEGQC_ORGANS:
+                    if organ in MEDSEGQC_ORGANS and medsegqc_supported_modality(modality):
+                        if image_array is None:
+                            image_array = load_volume_array(image_path)
                         qc = bundle.predict(
                             image_array,
                             candidate.mask_path,
                             modality,
                             fallback_volume_ml=candidate.volume_ml,
                         )
+                    elif organ in MEDSEGQC_ORGANS:
+                        qc = QCResult(error=f"MedSegQC not run: modality unsupported ({modality})")
                     else:
                         qc = QCResult(error="MedSegQC not run: organ outside supported set")
                     qc_by_key[(organ, candidate.tool_name)] = qc
@@ -1142,7 +1199,7 @@ class BatchQCRadiomicsRunner:
                     output_dir=medsegqc_dir,
                     item=item,
                     metadata=metadata,
-                    target_organs=[o for o in target_organs if o in MEDSEGQC_ORGANS],
+                    target_organs=medsegqc_supported_organs(target_organs),
                     candidate_rows=medsegqc_candidate_rows,
                     selected=medsegqc_selected,
                     radiomics_rows=outcome.medsegqc_radiomics_rows,
@@ -1158,7 +1215,7 @@ class BatchQCRadiomicsRunner:
                     output_dir=medsegqc_dir,
                     item=item,
                     metadata=metadata,
-                    target_organs=[o for o in target_organs if o in MEDSEGQC_ORGANS],
+                    target_organs=medsegqc_supported_organs(target_organs),
                     candidate_rows=medsegqc_candidate_rows,
                     selected={},
                     radiomics_rows=[],
@@ -1188,7 +1245,7 @@ class BatchQCRadiomicsRunner:
         modality: str,
         anatomy: str,
     ) -> None:
-        if not is_ct_like_modality(modality) or anatomy not in LUNG_ELIGIBLE_CT_ANATOMIES:
+        if not is_lung_shortcut_eligible(modality, anatomy):
             return
         for organ in ("lung_left", "lung_right"):
             organ_candidates = candidates.get(organ, [])
@@ -1324,7 +1381,10 @@ class BatchQCRadiomicsRunner:
     def _finalize_outcome(self, outcome: CaseOutcome, t0: float) -> CaseOutcome:
         outcome.total_time_s = time.time() - t0
         self.csv.append_rows(outcome.candidate_rows)
-        geometric_done = output_dir_complete(os.path.join(outcome.case_path, GEOMETRIC_QC_DIRNAME))
+        geometric_done = output_dir_complete(
+            os.path.join(outcome.case_path, GEOMETRIC_QC_DIRNAME),
+            require_selected_masks=True,
+        )
         medsegqc_done = medsegqc_output_done(outcome.case_path)
         self.tracker.set_status(
             outcome.case_id,
@@ -1394,6 +1454,7 @@ def run_self_test() -> None:
             root,
             "LUPUS/PT003/20240103/MRI_BRAIN_W_WO_CONTRAST/T1_AX",
             {
+                "segmentations_synthseg": {"brain": 5},
                 "segmentations_vista3d": {"kidney_left": 5, "liver": 5},
             },
         )
@@ -1402,6 +1463,13 @@ def run_self_test() -> None:
             "LUPUS/PT004/20240104/MRI_CARDIAC_MORPH_WO_CONTRAST/TRUE_FISP_AXIAL",
             {
                 "segmentations_mrseg": {"heart": 4, "liver": 5},
+            },
+        )
+        ct_cardiac_id, ct_cardiac_path = make_test_case(
+            root,
+            "LUPUS/PT004B/20240104/CT_CARDIAC_W_CONTRAST/AXIAL",
+            {
+                "segmentations_totalseg_ct": {"heart": 4, "aorta": 5},
             },
         )
         spine_id, spine_path = make_test_case(
@@ -1436,12 +1504,17 @@ def run_self_test() -> None:
                         },
                         brain_id: {
                             "status": "completed",
-                            "tools_run": ["VISTA3D"],
+                            "tools_run": ["SynthSeg", "VISTA3D"],
                             "error": "",
                         },
                         cardiac_id: {
                             "status": "completed",
                             "tools_run": ["MRSegmentator"],
+                            "error": "",
+                        },
+                        ct_cardiac_id: {
+                            "status": "completed",
+                            "tools_run": ["TotalSegmentator_CT"],
                             "error": "",
                         },
                         spine_id: {
@@ -1473,7 +1546,7 @@ def run_self_test() -> None:
         summary = runner.run()
         geometric_liver = os.path.join(abd_path, GEOMETRIC_QC_DIRNAME, "liver.nii.gz")
         medsegqc_liver = os.path.join(abd_path, MEDSEGQC_DIRNAME, "liver.nii.gz")
-        if summary["completed"] != 5 or summary["skipped"] != 1:
+        if summary["completed"] != 7 or summary["skipped"] != 0:
             raise AssertionError(f"Self-test failed: {summary}")
         if not os.path.isfile(geometric_liver) or not os.path.isfile(medsegqc_liver):
             raise AssertionError("Expected abdomen CT outputs in both filtered folders")
@@ -1487,12 +1560,20 @@ def run_self_test() -> None:
         chest_selected = json.load(open(os.path.join(chest_path, GEOMETRIC_QC_DIRNAME, "selection_summary.json")))
         if chest_selected["selected_organs"]["lung_left"].get("selection_reason") != "mrsegmentator_full_lung_default":
             raise AssertionError("Expected MRSegmentator lung shortcut reason")
-        if os.path.isdir(os.path.join(brain_path, GEOMETRIC_QC_DIRNAME)):
-            raise AssertionError("Brain MRI should not produce filtered outputs")
+        brain_mask = os.path.join(brain_path, GEOMETRIC_QC_DIRNAME, "brain.nii.gz")
+        if not os.path.isfile(brain_mask):
+            raise AssertionError("Brain MRI should keep SynthSeg brain in GeometricQC output")
+        brain_medsegqc_summary = os.path.join(brain_path, MEDSEGQC_DIRNAME, "selection_summary.json")
+        if not os.path.isfile(brain_medsegqc_summary):
+            raise AssertionError("Brain MRI should write MedSegQC marker summary")
         if not os.path.isfile(os.path.join(cardiac_path, GEOMETRIC_QC_DIRNAME, "heart.nii.gz")):
             raise AssertionError("Cardiac MRI should keep heart")
         if os.path.isfile(os.path.join(cardiac_path, GEOMETRIC_QC_DIRNAME, "liver.nii.gz")):
             raise AssertionError("Cardiac MRI should not keep irrelevant liver")
+        if not os.path.isfile(os.path.join(ct_cardiac_path, GEOMETRIC_QC_DIRNAME, "heart.nii.gz")):
+            raise AssertionError("Cardiac CT should keep heart")
+        if os.path.isfile(os.path.join(ct_cardiac_path, GEOMETRIC_QC_DIRNAME, "aorta.nii.gz")):
+            raise AssertionError("Cardiac CT should not keep aorta")
         if not os.path.isfile(os.path.join(spine_path, GEOMETRIC_QC_DIRNAME, "spine.nii.gz")):
             raise AssertionError("Spine MRI should keep spine")
         if not os.path.isfile(os.path.join(pelvis_path, GEOMETRIC_QC_DIRNAME, "prostate.nii.gz")):
@@ -1517,17 +1598,23 @@ def main() -> int:
     parser.add_argument("--ct-checkpoint", default=DEFAULT_CT_QC_CHECKPOINT)
     parser.add_argument("--mri-checkpoint", default=DEFAULT_MRI_QC_CHECKPOINT)
     parser.add_argument("--watch", action="store_true", help="Keep polling segmentation state for new completed cases")
-    parser.add_argument("--poll-seconds", type=float, default=60.0)
+    parser.add_argument("--poll-seconds", type=float, default=300.0)
     parser.add_argument("--max-cases", type=int, default=None)
     parser.add_argument("--force", action="store_true", help="Re-run even if filtered QC outputs already exist")
     parser.add_argument("--dry-run-qc", action="store_true", help="Do not load QC checkpoints; use deterministic fake QC")
     parser.add_argument("--skip-radiomics", action="store_true")
     parser.add_argument("--no-manual-radiomics-fallback", action="store_true")
+    parser.add_argument("--progress-every", type=int, default=50)
+    parser.add_argument(
+        "--log-level",
+        default="WARNING",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+    )
     parser.add_argument("--self-test", action="store_true")
     args = parser.parse_args()
 
     logging.basicConfig(
-        level=logging.INFO,
+        level=getattr(logging, args.log_level),
         format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
@@ -1553,6 +1640,7 @@ def main() -> int:
         force=args.force,
         poll_seconds=args.poll_seconds,
         max_cases=args.max_cases,
+        progress_every=args.progress_every,
     )
     summary = runner.run(watch=args.watch)
     print(json.dumps(summary, indent=2))
