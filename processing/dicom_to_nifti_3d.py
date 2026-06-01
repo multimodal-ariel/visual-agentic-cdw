@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import argparse
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -41,6 +42,7 @@ class DicomSlice:
     rows: int
     columns: int
     pixel_spacing: tuple[float, float]
+    series_count: int = 1
 
 
 def extract_selected_dicom_metadata(dicom) -> dict:
@@ -149,23 +151,8 @@ def _read_slice_header(path: str) -> DicomSlice | None:
     )
 
 
-def load_and_sort_dicom_slices(dicom_dir: str | os.PathLike) -> list[DicomSlice]:
-    """Load headers, validate one 3D series, and sort by physical slice position."""
-
-    slices = []
-    for path in find_dicom_files(dicom_dir):
-        header = _read_slice_header(path)
-        if header is not None:
-            slices.append(header)
-
-    if not slices:
-        raise ValueError(f"No valid 3D DICOM slices found in {dicom_dir}")
-
-    series_uids = {s.series_uid for s in slices}
-    if len(series_uids) != 1:
-        raise ValueError(
-            f"Expected one SeriesInstanceUID in {dicom_dir}, found {len(series_uids)}"
-        )
+def _validate_and_sort_series(slices: list[DicomSlice], dicom_dir: str | os.PathLike) -> list[DicomSlice]:
+    """Validate geometry within one SeriesInstanceUID and sort by physical position."""
 
     ref = slices[0]
     for s in slices[1:]:
@@ -194,7 +181,89 @@ def load_and_sort_dicom_slices(dicom_dir: str | os.PathLike) -> list[DicomSlice]
         if np.any(deltas < 0):
             raise ValueError(f"Slice sorting failed for {dicom_dir}")
 
-    return sorted_slices
+    series_count = len({s.series_uid for s in sorted_slices})
+    return [
+        DicomSlice(
+            path=s.path,
+            position=s.position,
+            row_cosines=s.row_cosines,
+            col_cosines=s.col_cosines,
+            normal=s.normal,
+            sort_position=s.sort_position,
+            instance_number=s.instance_number,
+            series_uid=s.series_uid,
+            study_uid=s.study_uid,
+            rows=s.rows,
+            columns=s.columns,
+            pixel_spacing=s.pixel_spacing,
+            series_count=series_count,
+        )
+        for s in sorted_slices
+    ]
+
+
+def load_and_sort_dicom_slices(dicom_dir: str | os.PathLike) -> list[DicomSlice]:
+    """Load headers, choose one valid sub-series, and sort by physical position.
+
+    Clinical exports sometimes put several SeriesInstanceUIDs inside one leaf
+    directory. We select the unique largest geometrically valid sub-series,
+    which corresponds to the diagnostic stack in the common mixed-folder case.
+    Ties still fail because there is no reliable automatic choice.
+    """
+
+    slices = []
+    for path in find_dicom_files(dicom_dir):
+        header = _read_slice_header(path)
+        if header is not None:
+            slices.append(header)
+
+    if not slices:
+        raise ValueError(f"No valid 3D DICOM slices found in {dicom_dir}")
+
+    by_series: dict[str, list[DicomSlice]] = defaultdict(list)
+    for s in slices:
+        by_series[s.series_uid].append(s)
+
+    valid: list[list[DicomSlice]] = []
+    errors: list[str] = []
+    for series_uid, group in by_series.items():
+        try:
+            sorted_group = _validate_and_sort_series(group, dicom_dir)
+            series_count = len(by_series)
+            sorted_group = [
+                DicomSlice(
+                    path=s.path,
+                    position=s.position,
+                    row_cosines=s.row_cosines,
+                    col_cosines=s.col_cosines,
+                    normal=s.normal,
+                    sort_position=s.sort_position,
+                    instance_number=s.instance_number,
+                    series_uid=s.series_uid,
+                    study_uid=s.study_uid,
+                    rows=s.rows,
+                    columns=s.columns,
+                    pixel_spacing=s.pixel_spacing,
+                    series_count=series_count,
+                )
+                for s in sorted_group
+            ]
+            valid.append(sorted_group)
+        except Exception as exc:
+            errors.append(f"{series_uid}: {exc}")
+
+    if not valid:
+        detail = f"; invalid series: {errors}" if errors else ""
+        raise ValueError(f"No valid DICOM sub-series found in {dicom_dir}{detail}")
+
+    valid.sort(key=lambda group: len(group), reverse=True)
+    if len(valid) > 1 and len(valid[0]) == len(valid[1]):
+        raise ValueError(
+            f"Ambiguous DICOM directory {dicom_dir}: multiple valid "
+            f"SeriesInstanceUIDs with {len(valid[0])} slices"
+        )
+
+    return valid[0]
 
 
 def _slice_spacing(sorted_slices: list[DicomSlice], ref_dicom) -> float:
@@ -254,6 +323,8 @@ def convert_dicom_to_nifti_3d(dicom_dir: str | os.PathLike):
             "num_slices": len(sorted_slices),
             "slice_spacing": z_spacing,
             "sort_method": "ImagePositionPatient_projected_on_slice_normal",
+            "source_series_count": ref_slice.series_count,
+            "selected_series_uid": ref_slice.series_uid,
         }
     )
     ext = Nifti1Extension(6, json.dumps(metadata, indent=2).encode("utf-8"))

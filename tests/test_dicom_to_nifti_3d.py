@@ -87,15 +87,40 @@ def test_ensure_nifti_for_case_is_idempotent(tmp_path):
     assert img.shape == (3, 2, 2)
 
 
-def test_convert_dicom_dir_to_nifti_rejects_mixed_series(tmp_path):
+def test_convert_dicom_dir_to_nifti_selects_largest_valid_series(tmp_path):
     dicom_dir = tmp_path / "dicom"
     dicom_dir.mkdir()
-    _write_slice(dicom_dir / "slice_1.dcm", instance=1, z_position=0, value=1, series_uid=generate_uid())
-    _write_slice(dicom_dir / "slice_2.dcm", instance=2, z_position=2, value=2, series_uid=generate_uid())
+    large_uid = generate_uid()
+    small_uid = generate_uid()
+    _write_slice(dicom_dir / "large_1.dcm", instance=1, z_position=0, value=10, series_uid=large_uid)
+    _write_slice(dicom_dir / "large_2.dcm", instance=2, z_position=2, value=20, series_uid=large_uid)
+    _write_slice(dicom_dir / "large_3.dcm", instance=3, z_position=4, value=30, series_uid=large_uid)
+    _write_slice(dicom_dir / "small_1.dcm", instance=1, z_position=0, value=99, series_uid=small_uid)
+
+    output = tmp_path / "out.nii.gz"
+    convert_dicom_dir_to_nifti(dicom_dir, output)
+
+    img = nib.load(output)
+    data = np.asanyarray(img.dataobj)
+    assert img.shape == (3, 2, 3)
+    assert np.all(data[:, :, 0] == 10)
+    assert np.all(data[:, :, 1] == 20)
+    assert np.all(data[:, :, 2] == 30)
+
+
+def test_convert_dicom_dir_to_nifti_rejects_ambiguous_series_tie(tmp_path):
+    dicom_dir = tmp_path / "dicom"
+    dicom_dir.mkdir()
+    uid_1 = generate_uid()
+    uid_2 = generate_uid()
+    _write_slice(dicom_dir / "a_1.dcm", instance=1, z_position=0, value=1, series_uid=uid_1)
+    _write_slice(dicom_dir / "a_2.dcm", instance=2, z_position=2, value=2, series_uid=uid_1)
+    _write_slice(dicom_dir / "b_1.dcm", instance=1, z_position=0, value=3, series_uid=uid_2)
+    _write_slice(dicom_dir / "b_2.dcm", instance=2, z_position=2, value=4, series_uid=uid_2)
 
     try:
         convert_dicom_dir_to_nifti(dicom_dir, tmp_path / "out.nii.gz")
     except ValueError as exc:
-        assert "SeriesInstanceUID" in str(exc)
+        assert "Ambiguous DICOM directory" in str(exc)
     else:
-        raise AssertionError("mixed DICOM series should be rejected")
+        raise AssertionError("ambiguous mixed DICOM series should be rejected")
