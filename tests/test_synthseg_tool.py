@@ -148,3 +148,50 @@ def test_no_llm_metadata_skips_known_modality_unknown_anatomy():
     assert meta["anatomy"] == "unknown"
     assert meta["is_diagnostic"] is False
     assert "Could not infer anatomy" in meta["skip_reason"]
+
+
+def test_no_llm_metadata_maps_brain_and_head_synonyms_to_head():
+    pipeline = CasePipeline(no_llm=True, dry_run=True)
+
+    brain = pipeline._metadata_from_path(
+        "/data/soumitri/segmentations_3d/CONTR/PATIENT/20240101/"
+        "MRI_BRAIN_W_WO_CONTRAST/t1_mprage_tra_p2_iso_1_0_POST"
+    )
+    head = pipeline._metadata_from_path(
+        "/data/soumitri/segmentations_3d/CONTR/PATIENT/20240101/"
+        "CTA_HEAD_W_WO_CONTRAST/CTA_HEAD__1_0__Hv45"
+    )
+
+    assert brain["modality"] == "MRI"
+    assert brain["anatomy"] == "head"
+    assert brain["is_diagnostic"] is True
+    assert head["modality"] == "CT"
+    assert head["anatomy"] == "head"
+    assert head["is_diagnostic"] is True
+
+
+def test_no_llm_metadata_guards_neuro_head_inference():
+    pipeline = CasePipeline(no_llm=True, dry_run=True)
+
+    neuro_brain = pipeline._metadata_from_path(
+        "/data/soumitri/segmentations_3d/CONTR/PATIENT/20240101/"
+        "MRI_NEURO_OUTSIDE_FILM_FOR_CONTINUED_CARE/FLAIR_AX"
+    )
+    neuro_spine = pipeline._metadata_from_path(
+        "/data/soumitri/segmentations_3d/CONTR/PATIENT/20240101/"
+        "MRI_NEURO_OUTSIDE_FILM_FOR_CONTINUED_CARE/Ax_T1__C_CERVICAL"
+    )
+    brainlab_sinus = pipeline._metadata_from_path(
+        "/data/soumitri/segmentations_3d/CONTR/PATIENT/20240101/"
+        "CT_MAXILLOFACIAL_WO_CONTRAST/BrainLab_Sinus__2_0__H70h"
+    )
+
+    assert neuro_brain["anatomy"] == "head"
+    assert neuro_brain["is_diagnostic"] is True
+    assert neuro_spine["anatomy"] == "spine"
+    assert "SynthSeg" not in pipeline._all_compatible_tools(
+        neuro_spine["modality"],
+        neuro_spine["anatomy"],
+    )
+    assert brainlab_sinus["anatomy"] == "unknown"
+    assert brainlab_sinus["is_diagnostic"] is False

@@ -34,6 +34,7 @@ from queue import Queue
 from typing import List, Optional
 
 from config.constants import (
+    DICOM_ROOT,
     IMAGE_FILENAME,
     LOG_DIR,
     SEGMENTATION_ROOT,
@@ -43,6 +44,7 @@ from config.constants import (
 from orchestrator.case_id import assert_unique_ids
 from orchestrator.case_tracker import CaseTracker
 from orchestrator.pipeline import CasePipeline, CaseResult
+from processing.dicom_to_nifti_3d import ensure_nifti_for_case
 
 logger = logging.getLogger(__name__)
 
@@ -236,6 +238,13 @@ class BatchRunner:
             self.tracker.set_status(case_id, "running")
             logger.info("[%s] Starting on %s", case_id, device)
 
+            materialize = self._ensure_case_image(case_id, case_path)
+            if materialize.status == "failed":
+                self.tracker.set_status(case_id, "failed", error=materialize.error)
+                self._append_csv(materialize)
+                logger.error("[%s] %s", case_id, materialize.error)
+                return materialize
+
             pipeline = CasePipeline(
                 planner_llm=self.planner_llm,
                 clinical_llm=self.clinical_llm,
@@ -275,6 +284,39 @@ class BatchRunner:
         finally:
             # Always return GPU to pool
             self._gpu_pool.put(device)
+
+    def _ensure_case_image(self, case_id: str, case_path: str) -> CaseResult:
+        """Create image_nifti.nii.gz from the matching DICOM series if missing."""
+
+        image_path = os.path.join(case_path, IMAGE_FILENAME)
+        if os.path.isfile(image_path):
+            return CaseResult(case_id=case_id, case_path=case_path, status="completed")
+
+        dicom_path = self._dicom_path_for_case(case_path)
+        status = ensure_nifti_for_case(
+            case_path,
+            dicom_path,
+            image_filename=IMAGE_FILENAME,
+        )
+        if status["status"] in {"exists", "converted"}:
+            logger.info("[%s] NIfTI %s: %s", case_id, status["status"], status["image_path"])
+            return CaseResult(case_id=case_id, case_path=case_path, status="completed")
+
+        result = CaseResult(case_id=case_id, case_path=case_path, status="failed")
+        result.error = status.get("error", f"NIfTI materialization failed: {status}")
+        result.warnings.append(f"DICOM source: {dicom_path}")
+        return result
+
+    @staticmethod
+    def _dicom_path_for_case(case_path: str) -> str:
+        """Map a segmentation case directory back to its raw DICOM directory."""
+
+        if case_path.startswith(DST_PREFIX):
+            return case_path.replace(DST_PREFIX, SRC_PREFIX, 1)
+        if case_path.startswith(f"{SEGMENTATION_ROOT}/"):
+            rel = case_path[len(f"{SEGMENTATION_ROOT}/"):]
+            return os.path.join(DICOM_ROOT, rel)
+        return case_path
 
     # ── Filelist loading ────────────────────────────────────────────────────
 

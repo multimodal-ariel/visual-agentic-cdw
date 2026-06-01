@@ -464,6 +464,26 @@ class CasePipeline:
         "BRAIN": "head",
         "UNKNOWN": "unknown",
     }
+    _HEAD_TOKENS = frozenset({
+        "HEAD", "BRAIN", "CRANIAL", "CRANIUM", "INTRACRANIAL", "CEREBRAL",
+        "CEREBRUM",
+    })
+    _NEURO_TOKENS = frozenset({"NEURO", "NEURORAD", "NEURORADIOLOGY"})
+    _NEURO_EXCLUDE_TOKENS = frozenset({
+        "SPINE", "CSPINE", "TSPINE", "LSPINE", "CERVICAL", "THORACIC",
+        "LUMBAR", "SACRAL", "NECK", "SINUS", "MAXILLOFACIAL",
+        "MAXFACE", "FACE", "ORBIT", "ORBITS", "TEMPORAL", "LUNG", "CHEST",
+        "ABD", "ABDOMEN", "PELVIS",
+    })
+    _NEURO_BRAINLIKE_TOKENS = frozenset({
+        "FLAIR", "DWI", "ADC", "SWI", "MPRAGE", "BRAVO", "SPGR", "T1",
+        "T2", "GRE", "DIFFUSION", "TRACE", "TOF", "MRA", "MRV",
+        "HEAD", "BRAIN",
+    })
+    _SPINE_TOKENS = frozenset({
+        "SPINE", "CSPINE", "TSPINE", "LSPINE", "CERVICAL", "THORACIC",
+        "LUMBAR", "SACRAL",
+    })
     _DATE_RE = re.compile(
         r"^("
         r"\d{8}|"                # YYYYMMDD
@@ -532,13 +552,37 @@ class CasePipeline:
     def _anatomy_from_component(cls, comp: str) -> str:
         """Return matching anatomy region or 'UNKNOWN'."""
         cu = comp.upper()
+        tokens = set(cls._subtokens(comp))
         if "ABD" in cu and "PELVIS" in cu:
             return "ABDOMEN_PELVIS"
         if "CHEST" in cu and "ABD" in cu:
             return "CHEST_ABDOMEN_PELVIS"
+        if tokens & cls._SPINE_TOKENS:
+            return "SPINE"
+        if "NECK" in tokens:
+            return "NECK"
+        if tokens & cls._HEAD_TOKENS:
+            return "HEAD"
         for region in cls._ANATOMY_REGIONS:
+            if region in {"HEAD", "BRAIN", "SPINE", "NECK"}:
+                continue
             if region in cu:
                 return region
+        return "UNKNOWN"
+
+    @classmethod
+    def _guarded_neuro_anatomy(cls, parts: list[str]) -> str:
+        """Infer head for neuro studies only when no competing anatomy is present."""
+
+        all_tokens = set()
+        for comp in parts:
+            all_tokens.update(cls._subtokens(comp))
+        if not (all_tokens & cls._NEURO_TOKENS):
+            return "UNKNOWN"
+        if all_tokens & cls._NEURO_EXCLUDE_TOKENS:
+            return "UNKNOWN"
+        if all_tokens & cls._NEURO_BRAINLIKE_TOKENS:
+            return "HEAD"
         return "UNKNOWN"
 
     def _metadata_from_path(self, case_path: str) -> dict:
@@ -619,6 +663,8 @@ class CasePipeline:
                 if a != "UNKNOWN":
                     anatomy = a
                     break
+        if anatomy == "UNKNOWN":
+            anatomy = self._guarded_neuro_anatomy(parts)
 
         anatomy_norm = self._ANATOMY_NORM.get(anatomy, anatomy.lower())
 
