@@ -1,4 +1,4 @@
-# *You See Voxels, I See Features:* A Unified Pipeline for Reliable Processing of Large-Scale Heterogeneous Clinical Imaging Data
+## *You See Voxels, I See Features:* A Unified Pipeline for Reliable Processing of Large-Scale Heterogeneous Clinical Imaging Data
 
 ```text
 DICOM/NIfTI -> metadata -> tool selection -> segmentation -> QC -> radiomics
@@ -13,7 +13,7 @@ tool backends.
 Authors: Soumitri Chattopadhyay, Basar Demir, Yinzhu Jin, Marc Niethammer  
 UCSD Biomedical Image Analysis Group
 
-## Highlights
+### Highlights
 
 - Batch processing for heterogeneous clinical filelists with persistent resume state.
 - Lazy DICOM-to-NIfTI materialization for cases missing `image_nifti.nii.gz`.
@@ -22,7 +22,7 @@ UCSD Biomedical Image Analysis Group
 - Two-stage downstream QC/radiomics: largest-volume GeometricQC, optional MedSegQC for supported CT/MRI abdominal organs, and PyRadiomics shape/first-order features.
 - One wrapper contract for all tools: each tool writes binary per-organ masks into a canonical `segmentations_<tool>/` folder.
 
-## Integrated Tools
+### Integrated Tools
 
 Active segmentation backends include:
 
@@ -37,7 +37,7 @@ Active segmentation backends include:
 
 Deferred or optional integrations include BiomedParse2D/3D, nnInteractive, HybridGNet, cuRadiomics, and LLM-based planning/QC interpretation. Tool metadata lives in `config/tool_registry.json`.
 
-## Repository Layout
+### Repository Layout
 
 - `orchestrator/`: single-case pipeline, batch runner, QC/radiomics runner, state tracking.
 - `tools/`: model wrappers and subprocess runners.
@@ -49,7 +49,7 @@ Deferred or optional integrations include BiomedParse2D/3D, nnInteractive, Hybri
 - `external/`: third-party model repositories.
 - `checkpoints/`: model weights, ignored by git.
 
-## Installation
+### Installation
 
 Clone the repository and populate external tool code:
 
@@ -81,7 +81,7 @@ SEGMENTATION_ROOT = "/path/to/segmentation_outputs"
 
 For full server setup, environment-specific fixes, and checkpoint notes, see `docs/installation.md` and `docs/deployment.md`.
 
-## Quick Start
+### Quick Start
 
 Run a segmentation batch over a JSON filelist of case directories:
 
@@ -103,7 +103,7 @@ The runner writes:
 
 Completed cases are skipped automatically on rerun. Add `--retry-failed` to retry failed cases.
 
-## QC and Radiomics
+### QC and Radiomics
 
 After segmentation, run the downstream filtering and feature extraction pass:
 
@@ -129,7 +129,7 @@ Per-case QC outputs:
 
 MedSegQC is only used for supported CT/MRI abdominal organs (`liver`, `spleen`, `kidney_left`, `kidney_right`). PET/CT cases still receive GeometricQC/radiomics, but MedSegQC is skipped.
 
-## Data Contract
+### Data Contract
 
 Each case directory is expected to contain or be able to materialize:
 
@@ -142,7 +142,7 @@ Each case directory is expected to contain or be able to materialize:
 
 Masks should be binary, named by normalized organ name, and aligned to `image_nifti.nii.gz` unless the wrapper explicitly records/resolves geometry differences.
 
-## Extending the Pipeline
+### Extending the Pipeline
 
 To add a segmentation model:
 
@@ -155,7 +155,7 @@ To add a segmentation model:
 
 See `docs/adding_segmentation_tool.md` for the full checklist.
 
-## Development Checks
+### Development Checks
 
 ```bash
 conda run -n cdw_radiomics python orchestrator/batch_qc_radiomics_runner.py --self-test
@@ -169,7 +169,7 @@ For focused setup/debugging, see:
 - `docs/adding_segmentation_tool.md`
 - `docs/PARALLELISM.md`
 
-## Notes
+### Notes
 
 - This repository tracks code and configuration only. Data, checkpoints, logs, and generated outputs should remain untracked.
 - Tool environments are intentionally separate; a single unified Python environment is not expected to work.
