@@ -41,6 +41,9 @@ def test_ensure_case_image_uses_lazy_materialization(tmp_path, monkeypatch):
             "status": "converted",
             "image_path": image_path,
             "dicom_path": str(dicom_path_arg),
+            "source_series_count": 2,
+            "selected_series_uid": "1.2.3",
+            "series_selection_reason": "largest_valid_series",
         }
 
     monkeypatch.setattr(batch_runner_module, "ensure_nifti_for_case", fake_ensure)
@@ -51,6 +54,8 @@ def test_ensure_case_image_uses_lazy_materialization(tmp_path, monkeypatch):
     assert calls["case_path"] == str(case_path)
     assert calls["dicom_path"] == str(case_path)
     assert os.path.isfile(case_path / "image_nifti.nii.gz")
+    assert result.metadata["nifti_materialization"]["status"] == "converted"
+    assert result.metadata["nifti_materialization"]["selected_series_uid"] == "1.2.3"
 
 
 def test_ensure_case_image_reports_missing_dicom_as_failed(tmp_path, monkeypatch):
@@ -72,3 +77,54 @@ def test_ensure_case_image_reports_missing_dicom_as_failed(tmp_path, monkeypatch
 
     assert result.status == "failed"
     assert "DICOM directory not found" in result.error
+
+
+def test_batch_runner_defaults_to_v3_state_and_output(tmp_path, monkeypatch):
+    monkeypatch.setattr(batch_runner_module, "LOG_DIR", str(tmp_path / "logs"))
+    runner = BatchRunner(
+        filelist=str(tmp_path / "filelist.json"),
+        dry_run=True,
+        no_llm=True,
+    )
+
+    assert runner.state_file.endswith("pipeline_state_v3.json")
+    assert runner.output_csv.endswith("pipeline_results_v3.csv")
+
+
+def test_batch_runner_reprocesses_stale_running_cases(tmp_path, monkeypatch):
+    filelist = tmp_path / "filelist.json"
+    case_path = tmp_path / "case"
+    case_path.mkdir()
+    filelist.write_text(json.dumps([str(case_path)]))
+    runner = BatchRunner(
+        filelist=str(filelist),
+        state_file=str(tmp_path / "state.json"),
+        output_csv=str(tmp_path / "results.csv"),
+        dry_run=True,
+        no_llm=True,
+        progress_every=0,
+    )
+
+    case_id = next(iter(runner.tracker._state["cases"])) if runner.tracker._state.get("cases") else None
+    if case_id is None:
+        from orchestrator.case_id import derive_case_id
+
+        case_id = derive_case_id(str(case_path))
+        runner.tracker.register_cases([case_id])
+    runner.tracker.set_status(case_id, "running")
+
+    called = {}
+
+    def fake_run_one(cid, path):
+        called["cid"] = cid
+        from orchestrator.pipeline import CaseResult
+
+        runner.tracker.set_status(cid, "skipped")
+        return CaseResult(case_id=cid, case_path=path, status="skipped")
+
+    monkeypatch.setattr(runner, "_run_one_case", fake_run_one)
+
+    summary = runner.run()
+
+    assert called["cid"] == case_id
+    assert summary["skipped"] == 1

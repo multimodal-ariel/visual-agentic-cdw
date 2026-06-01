@@ -214,7 +214,12 @@ class CasePipeline:
 
     # ── Public API ──────────────────────────────────────────────────────────
 
-    def run(self, case_path: str, metadata_override: Optional[Dict[str, Any]] = None) -> CaseResult:
+    def run(
+        self,
+        case_path: str,
+        metadata_override: Optional[Dict[str, Any]] = None,
+        extra_metadata: Optional[Dict[str, Any]] = None,
+    ) -> CaseResult:
         """
         Execute the full pipeline on one case.
 
@@ -222,6 +227,8 @@ class CasePipeline:
             case_path: Directory containing image_nifti.nii.gz.
             metadata_override: If provided, skip metadata extraction and use these values.
                 Useful for testing when case_path doesn't encode modality/anatomy.
+            extra_metadata: Additional structured metadata to merge after
+                extraction, e.g. NIfTI materialization provenance.
 
         Returns:
             CaseResult with all outputs, timing, and errors.
@@ -248,6 +255,8 @@ class CasePipeline:
                             metadata_override.get("anatomy"))
             else:
                 result.metadata = self._step_metadata(case_path, image_path, result)
+            if extra_metadata:
+                result.metadata.update(extra_metadata)
             if self._is_unknown_anatomy(result.metadata.get("anatomy", "")):
                 result.is_diagnostic = False
                 result.metadata["skip_reason"] = (
@@ -779,6 +788,8 @@ class CasePipeline:
                 if supported_mods and modality_u not in supported_mods:
                     continue
                 supported_ana = [a.lower() for a in entry.get("supported_anatomies", [])]
+                if anatomy_l == "head" and "head" not in supported_ana:
+                    continue
                 if name in self._STRICT_ANATOMY_TOOLS and anatomy_l not in supported_ana:
                     continue
                 # Anatomy filter: skip only when both the tool and the case

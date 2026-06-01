@@ -26,7 +26,7 @@ import os
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +107,7 @@ class CaseTracker:
         status: str,
         error: str = "",
         tools_run: Optional[List[str]] = None,
+        extra: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Update status for a single case. Writes to disk immediately."""
         if status not in _VALID_STATES:
@@ -119,14 +120,17 @@ class CaseTracker:
                     "tools_run": tools_run or [],
                     "error": error,
                 }
+                if extra:
+                    self._state["cases"][case_id].update(extra)
             else:
                 entry = self._state["cases"][case_id]
                 entry["status"] = status
                 entry["updated_at"] = datetime.now().isoformat()
-                if error:
-                    entry["error"] = error
+                entry["error"] = error
                 if tools_run is not None:
                     entry["tools_run"] = tools_run
+                if extra:
+                    entry.update(extra)
             self._flush()
 
     def add_tool_run(self, case_id: str, tool_name: str) -> None:

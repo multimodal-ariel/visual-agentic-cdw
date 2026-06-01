@@ -130,11 +130,19 @@ def test_synthseg_head_ct_passes_ct_flag(tmp_path, monkeypatch):
 def test_no_llm_registry_selects_synthseg_for_head_ct_mri_only():
     pipeline = CasePipeline(no_llm=True, dry_run=True)
 
-    assert "SynthSeg" in pipeline._all_compatible_tools("CT", "head")
-    assert "SynthSeg" in pipeline._all_compatible_tools("MRI", "head")
+    assert pipeline._all_compatible_tools("CT", "head") == ["SynthSeg"]
+    assert pipeline._all_compatible_tools("MRI", "head") == ["SynthSeg"]
     assert pipeline._all_compatible_tools("CT", "unknown") == []
     assert pipeline._all_compatible_tools("MRI", "unknown") == []
     assert "SynthSeg" not in pipeline._all_compatible_tools("CT", "abdomen")
+
+
+def test_no_llm_registry_keeps_prompted_tools_for_rule_based_organs():
+    pipeline = CasePipeline(no_llm=True, dry_run=True)
+    tools = pipeline._all_compatible_tools("CT", "abdomen")
+
+    assert "VoxTell" in tools
+    assert "VISTA3D" in tools
 
 
 def test_no_llm_metadata_skips_known_modality_unknown_anatomy():

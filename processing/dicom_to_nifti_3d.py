@@ -315,9 +315,23 @@ def _choose_from_equal_length_series(
             selection_reason="same_geometry_deterministic_tiebreak",
         )
 
-    raise ValueError(
-        f"Ambiguous DICOM directory {dicom_dir}: multiple valid "
-        f"SeriesInstanceUIDs with {len(groups[0])} slices"
+    # Some clinical export folders contain multiple complete reconstructions
+    # with the same slice count. At this point each candidate is internally
+    # geometrically valid and equally preferred by ImageType, so choose a stable
+    # one rather than blocking lazy NIfTI materialization. The chosen UID and
+    # reason are written into the NIfTI header extension for auditability.
+    chosen = sorted(
+        best,
+        key=lambda group: (
+            group[0].series_number if group[0].series_number is not None else 10**9,
+            group[0].acquisition_number if group[0].acquisition_number is not None else 10**9,
+            group[0].series_uid,
+        ),
+    )[0]
+    return _with_selection_metadata(
+        chosen,
+        series_count=chosen[0].series_count,
+        selection_reason="equal_length_deterministic_tiebreak",
     )
 
 
@@ -480,6 +494,39 @@ def convert_dicom_dir_to_nifti(
     return output_path
 
 
+def read_nifti_conversion_provenance(nifti_path: str | os.PathLike) -> dict:
+    """Read lightweight conversion provenance from a NIfTI header extension."""
+
+    provenance = {}
+    if not os.path.isfile(nifti_path):
+        return provenance
+    try:
+        img = nib.load(str(nifti_path))
+        for ext in img.header.extensions:
+            try:
+                payload = ext.get_content()
+                if isinstance(payload, bytes):
+                    payload = payload.decode("utf-8")
+                data = json.loads(payload)
+            except Exception:
+                continue
+            for key in (
+                "source_series_count",
+                "selected_series_uid",
+                "series_selection_reason",
+                "num_slices",
+                "slice_spacing",
+                "sort_method",
+            ):
+                if key in data:
+                    provenance[key] = data[key]
+            if provenance:
+                break
+    except Exception:
+        return {}
+    return provenance
+
+
 def ensure_nifti_for_case(
     case_path: str | os.PathLike,
     dicom_path: str | os.PathLike,
@@ -501,6 +548,7 @@ def ensure_nifti_for_case(
             "status": "exists",
             "image_path": output_path,
             "dicom_path": dicom_path,
+            **read_nifti_conversion_provenance(output_path),
         }
 
     if not os.path.isdir(dicom_path):
@@ -525,6 +573,7 @@ def ensure_nifti_for_case(
         "status": "converted",
         "image_path": output_path,
         "dicom_path": dicom_path,
+        **read_nifti_conversion_provenance(output_path),
     }
 
 

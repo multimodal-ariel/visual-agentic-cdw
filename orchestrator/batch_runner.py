@@ -44,7 +44,10 @@ from config.constants import (
 from orchestrator.case_id import assert_unique_ids
 from orchestrator.case_tracker import CaseTracker
 from orchestrator.pipeline import CasePipeline, CaseResult
-from processing.dicom_to_nifti_3d import ensure_nifti_for_case
+from processing.dicom_to_nifti_3d import (
+    ensure_nifti_for_case,
+    read_nifti_conversion_provenance,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +90,7 @@ class BatchRunner:
         consensus: bool = False,
         tools_whitelist: Optional[List[str]] = None,
         tool_timeout_s: Optional[float] = None,
+        progress_every: int = 50,
     ):
         self.filelist = filelist
         self.gpus = gpus or [0]
@@ -113,6 +117,7 @@ class BatchRunner:
         self.llm = llm
         self.tools_whitelist = tools_whitelist
         self.tool_timeout_s = tool_timeout_s
+        self.progress_every = max(0, int(progress_every))
 
         # Validate --tools whitelist against the registry up front. A typo
         # like 'TotalSegmentatorCT' (missing underscore) would otherwise
@@ -127,8 +132,8 @@ class BatchRunner:
 
         # Default paths
         os.makedirs(LOG_DIR, exist_ok=True)
-        self.state_file = state_file or os.path.join(LOG_DIR, "pipeline_state.json")
-        self.output_csv = output_csv or os.path.join(LOG_DIR, "pipeline_results.csv")
+        self.state_file = state_file or os.path.join(LOG_DIR, "pipeline_state_v3.json")
+        self.output_csv = output_csv or os.path.join(LOG_DIR, "pipeline_results_v3.csv")
 
         # GPU pool: thread-safe queue of device strings
         self._gpu_pool: Queue = Queue()
@@ -169,7 +174,7 @@ class BatchRunner:
         work = []
         for cid in case_ids:
             status = self.tracker.get_status(cid)
-            if status == "pending":
+            if status in {"pending", "running"}:
                 work.append(cid)
             elif status == "failed" and retry_failed:
                 work.append(cid)
@@ -193,6 +198,8 @@ class BatchRunner:
         # Run with thread pool
         completed = 0
         failed = 0
+        skipped = 0
+        processed = 0
 
         with ThreadPoolExecutor(max_workers=self.workers) as executor:
             futures = {}
@@ -211,10 +218,16 @@ class BatchRunner:
                         completed += 1
                     elif result.status == "failed":
                         failed += 1
+                    elif result.status == "skipped":
+                        skipped += 1
+                    processed += 1
+                    self._log_progress(processed, len(work), completed, failed, skipped, t0)
                 except Exception as e:
                     logger.error("[%s] Unhandled error: %s", cid, e)
                     self.tracker.set_status(cid, "failed", error=str(e))
                     failed += 1
+                    processed += 1
+                    self._log_progress(processed, len(work), completed, failed, skipped, t0)
 
         elapsed = time.time() - t0
         summary = self.tracker.summary()
@@ -222,11 +235,38 @@ class BatchRunner:
 
         logger.info(
             "Batch complete: %d completed, %d failed, %d skipped in %.1fs",
-            completed, failed,
-            summary.get("skipped", 0), elapsed,
+            completed, failed, skipped, elapsed,
         )
 
         return summary
+
+    def _log_progress(
+        self,
+        processed: int,
+        total_work: int,
+        completed: int,
+        failed: int,
+        skipped: int,
+        t0: float,
+    ) -> None:
+        if self.progress_every <= 0:
+            return
+        if processed != total_work and processed % self.progress_every != 0:
+            return
+        elapsed = max(time.time() - t0, 1e-6)
+        rate = processed / elapsed
+        remaining = max(total_work - processed, 0)
+        eta_min = remaining / rate / 60 if rate > 0 else 0.0
+        logger.warning(
+            "Progress: %d/%d processed | completed=%d failed=%d skipped=%d | %.2f cases/min | ETA %.1f min",
+            processed,
+            total_work,
+            completed,
+            failed,
+            skipped,
+            rate * 60,
+            eta_min,
+        )
 
     # ── Single case worker ──────────────────────────────────────────────────
 
@@ -240,7 +280,16 @@ class BatchRunner:
 
             materialize = self._ensure_case_image(case_id, case_path)
             if materialize.status == "failed":
-                self.tracker.set_status(case_id, "failed", error=materialize.error)
+                self.tracker.set_status(
+                    case_id,
+                    "failed",
+                    error=materialize.error,
+                    extra={
+                        "nifti_materialization": materialize.metadata.get(
+                            "nifti_materialization", {}
+                        )
+                    },
+                )
                 self._append_csv(materialize)
                 logger.error("[%s] %s", case_id, materialize.error)
                 return materialize
@@ -257,7 +306,14 @@ class BatchRunner:
                 tool_timeout_s=self.tool_timeout_s,
             )
 
-            result = pipeline.run(case_path)
+            result = pipeline.run(
+                case_path,
+                extra_metadata={
+                    "nifti_materialization": materialize.metadata.get(
+                        "nifti_materialization", {}
+                    )
+                },
+            )
 
             # Update tracker
             tools_run = [t["tool_name"] for t in result.tool_outputs if t.get("success")]
@@ -266,6 +322,11 @@ class BatchRunner:
                 result.status,
                 error=result.error,
                 tools_run=tools_run,
+                extra={
+                    "nifti_materialization": result.metadata.get(
+                        "nifti_materialization", {}
+                    )
+                },
             )
 
             # Append to CSV
@@ -290,7 +351,14 @@ class BatchRunner:
 
         image_path = os.path.join(case_path, IMAGE_FILENAME)
         if os.path.isfile(image_path):
-            return CaseResult(case_id=case_id, case_path=case_path, status="completed")
+            result = CaseResult(case_id=case_id, case_path=case_path, status="completed")
+            result.metadata["nifti_materialization"] = {
+                "status": "exists",
+                "image_path": image_path,
+                "dicom_path": self._dicom_path_for_case(case_path),
+                **read_nifti_conversion_provenance(image_path),
+            }
+            return result
 
         dicom_path = self._dicom_path_for_case(case_path)
         status = ensure_nifti_for_case(
@@ -300,10 +368,13 @@ class BatchRunner:
         )
         if status["status"] in {"exists", "converted"}:
             logger.info("[%s] NIfTI %s: %s", case_id, status["status"], status["image_path"])
-            return CaseResult(case_id=case_id, case_path=case_path, status="completed")
+            result = CaseResult(case_id=case_id, case_path=case_path, status="completed")
+            result.metadata["nifti_materialization"] = status
+            return result
 
         result = CaseResult(case_id=case_id, case_path=case_path, status="failed")
         result.error = status.get("error", f"NIfTI materialization failed: {status}")
+        result.metadata["nifti_materialization"] = status
         result.warnings.append(f"DICOM source: {dicom_path}")
         return result
 
@@ -457,10 +528,22 @@ if __name__ == "__main__":
         help="Per-tool subprocess timeout in seconds (e.g. 600 = 10 min). "
              "Default: no timeout. Tool will be marked failed on timeout.",
     )
+    parser.add_argument(
+        "--progress-every",
+        type=int,
+        default=50,
+        help="Emit one progress snapshot every N completed futures. Use 0 to disable.",
+    )
+    parser.add_argument(
+        "--log-level",
+        default="WARNING",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Console log level. WARNING keeps full-corpus runs quiet except progress/errors.",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
-        level=logging.INFO,
+        level=getattr(logging, args.log_level),
         format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
@@ -494,6 +577,7 @@ if __name__ == "__main__":
         clinical_llm=clinical_llm,
         tools_whitelist=tools_whitelist,
         tool_timeout_s=args.tool_timeout,
+        progress_every=args.progress_every,
     )
 
     summary = runner.run(retry_failed=args.retry_failed)

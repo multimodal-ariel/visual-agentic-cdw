@@ -125,7 +125,7 @@ def test_convert_dicom_dir_to_nifti_resolves_same_geometry_series_tie(tmp_path):
     assert img.shape == (3, 2, 2)
 
 
-def test_convert_dicom_dir_to_nifti_rejects_ambiguous_series_tie(tmp_path):
+def test_convert_dicom_dir_to_nifti_resolves_equal_length_different_geometry_tie(tmp_path):
     dicom_dir = tmp_path / "dicom"
     dicom_dir.mkdir()
     uid_1 = generate_uid()
@@ -135,9 +135,8 @@ def test_convert_dicom_dir_to_nifti_rejects_ambiguous_series_tie(tmp_path):
     _write_slice(dicom_dir / "b_1.dcm", instance=1, z_position=10, value=3, series_uid=uid_2)
     _write_slice(dicom_dir / "b_2.dcm", instance=2, z_position=12, value=4, series_uid=uid_2)
 
-    try:
-        convert_dicom_dir_to_nifti(dicom_dir, tmp_path / "out.nii.gz")
-    except ValueError as exc:
-        assert "Ambiguous DICOM directory" in str(exc)
-    else:
-        raise AssertionError("ambiguous mixed DICOM series should be rejected")
+    output = tmp_path / "out.nii.gz"
+    convert_dicom_dir_to_nifti(dicom_dir, output)
+
+    img = nib.load(output)
+    assert img.shape == (3, 2, 2)
