@@ -18,6 +18,10 @@ segmentation foundation models behind a common interface, tracks long-running
 batch jobs, and keeps outputs reproducible across modalities, anatomies, and
 tool backends.
 
+<div align="center">
+  <img src="docs/overall.png" alt="Pipeline overview" width="800">
+</div>
+
 ### Highlights
 
 - Batch processing for heterogeneous clinical filelists with persistent resume state.
