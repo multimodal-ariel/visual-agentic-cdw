@@ -1,8 +1,6 @@
 <div align="center">
 
-## You See Voxels, I See Features
-
-### A Unified Pipeline for Reliable Processing of Large-Scale Heterogeneous Clinical Imaging Data
+## You See Voxels, I See Features: <br> A Unified Pipeline for Reliable Processing of Large-Scale Heterogeneous Clinical Imaging Data
 
 [Soumitri Chattopadhyay](https://soumitri2001.github.io) · Basar Demir · Marc Niethammer
 
