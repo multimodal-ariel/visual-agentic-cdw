@@ -1,17 +1,22 @@
-## *You See Voxels, I See Features:* A Unified Pipeline for Reliable Processing of Large-Scale Heterogeneous Clinical Imaging Data
+<div align="center">
 
-```text
-DICOM/NIfTI -> metadata -> tool selection -> segmentation -> QC -> radiomics
-```
+## You See Voxels, I See Features
+
+### A Unified Pipeline for Reliable Processing of Large-Scale Heterogeneous Clinical Imaging Data
+
+[Soumitri Chattopadhyay](https://soumitri2001.github.io) · Basar Demir · Marc Niethammer
+
+**[UCSD Biomedical Image Analysis Group](https://cseweb.ucsd.edu/~mniethammer/)**
+
+</div>
+
+---
 
 The pipeline turns messy clinical imaging folders into standardized anatomical
-masks, QC summaries, and quantitative imaging features. It wraps multiple
+masks, quality check (QC) summaries, and quantitative imaging features. It wraps multiple
 segmentation foundation models behind a common interface, tracks long-running
 batch jobs, and keeps outputs reproducible across modalities, anatomies, and
 tool backends.
-
-Authors: Soumitri Chattopadhyay, Basar Demir, Yinzhu Jin, Marc Niethammer  
-UCSD Biomedical Image Analysis Group
 
 ### Highlights
 
@@ -127,7 +132,7 @@ Per-case QC outputs:
 - `radiomics_features.csv`: PyRadiomics shape and first-order features.
 - `selection_summary.json`: selected masks and provenance.
 
-MedSegQC is only used for supported CT/MRI abdominal organs (`liver`, `spleen`, `kidney_left`, `kidney_right`). PET/CT cases still receive GeometricQC/radiomics, but MedSegQC is skipped.
+MedSegQC is currently only used for supported CT/MRI abdominal organs (`liver`, `spleen`, `kidney_left`, `kidney_right`). PET/CT cases still receive GeometricQC/radiomics, but MedSegQC is skipped.
 
 ### Data Contract
 
